@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:pages": "npm run build && wrangler pages dev dist --port 8788 --compatibility-date 2026-08-02",
+    "dev:pages": "npm run build && wrangler pages dev dist --port 8788 --compatibility-date 2026-08-02 --config wrangler.pages.toml",
     "build": "vite build",
     "deploy": "wrangler pages deploy dist --project-name lifehub"
   },

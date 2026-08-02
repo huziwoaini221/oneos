@@ -20,7 +20,6 @@
     "db:migrate": "wrangler d1 execute lifehub-db --file=./database/schema.sql --remote"
   },
   "devDependencies": {
-    "@rolldown/pluginutils": "^0.1.0",
     "wrangler": "^3.99.0"
   }
 }
