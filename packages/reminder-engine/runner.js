@@ -5,7 +5,7 @@ import { loadCandidates } from './loader.js'
 import { evaluate } from './evaluator.js'
 import { canNotify } from './deduplicator.js'
 import { sendTelegram, buildMessage, buildDailyDigest } from './sender.js'
-import { nextFireAt, deriveNotifyInterval } from './scheduler.js'
+import { nextFireAt, deriveNotifyInterval, localParts } from './scheduler.js'
 
 export async function runReminderEngine(env) {
   const db = env.DB
@@ -61,8 +61,9 @@ async function processTimeRule(db, env, settings, rule) {
 
 async function processBirthdayRule(db, env, settings, rule) {
   const now = new Date()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
+  const p = localParts(now, settings.timezone || 'Asia/Shanghai')
+  const month = String(p.month).padStart(2, '0')
+  const day = String(p.day).padStart(2, '0')
   const { results: birthdays } = await db.prepare(
     "SELECT * FROM contacts WHERE birthday IS NOT NULL AND substr(birthday, 6, 5) = ?"
   ).bind(`${month}-${day}`).all()
