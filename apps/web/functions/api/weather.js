@@ -22,7 +22,7 @@ export async function onRequestGet({ request }) {
   return json({
     city: area?.areaName?.[0]?.value || city,
     temp: cur.temp_C != null ? Math.round(cur.temp_C) : null,
-    condition: weatherZh(cur.weatherDesc?.[0]?.value),
+    condition: weatherZh((cur.weatherDesc?.[0]?.value || '').trim()),
     humidity: cur.humidity != null ? Math.round(cur.humidity) : null,
     wind,
     updated_at: new Date().toISOString()
@@ -41,7 +41,8 @@ const WEATHER_MAP = {
 
 function weatherZh(desc) {
   if (!desc) return '未知'
-  return WEATHER_MAP[desc] || desc
+  const key = desc.trim()
+  return WEATHER_MAP[key] || key
 }
 
 function windDirZh(dir16) {
