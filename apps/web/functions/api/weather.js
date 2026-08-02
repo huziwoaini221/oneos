@@ -1,44 +1,50 @@
 import { json } from './_lib.js'
 
-export async function onRequestGet({ env, request }) {
+export async function onRequestGet({ request }) {
   const url = new URL(request.url)
   const city = url.searchParams.get('city')
-  const key = env.OPENWEATHER_API_KEY
-  if (!key) return json({ error: 'OPENWEATHER_API_KEY not configured' }, 500)
   if (!city) return json({ error: 'missing city param' }, 400)
 
-  const geoRes = await fetch(`https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)}&limit=1&appid=${key}`)
-  if (!geoRes.ok) {
-    return json({ error: `geocoding ${geoRes.status}: ${geoRes.statusText}` }, 502)
-  }
-  const geo = await geoRes.json()
-  if (!geo.length) return json({ error: `city not found: ${city}` }, 404)
-  const { lat, lon, name } = geo[0]
-
-  const target = `https://api.openweathermap.org/data/4.0/onecall/current?lat=${lat}&lon=${lon}&appid=${key}&units=metric&lang=zh_cn`
+  const target = `https://wttr.in/${encodeURIComponent(city)}?format=j1`
   const res = await fetch(target)
   if (!res.ok) {
-    return json({ error: `openweather ${res.status}: ${res.statusText}` }, 502)
+    return json({ error: `wttr.in ${res.status}: ${res.statusText}` }, 502)
   }
   const data = await res.json()
-  const cur = data.data?.[0] || {}
 
-  const wind = cur.wind_deg != null && cur.wind_speed != null
-    ? `${windDirection(cur.wind_deg)} ${Math.round(cur.wind_speed)} 级`
+  const area = data.nearest_area?.[0]
+  const cur = data.current_condition?.[0] || {}
+
+  const wind = cur.winddir16Point && cur.windspeedKmph != null
+    ? `${windDirZh(cur.winddir16Point)} ${Math.round(cur.windspeedKmph / 3.6)} 级`
     : null
 
   return json({
-    city: name || city,
-    temp: Math.round(cur.temp ?? 0),
-    condition: cur.weather?.[0]?.description || '未知',
-    humidity: cur.humidity ?? null,
+    city: area?.areaName?.[0]?.value || city,
+    temp: cur.temp_C != null ? Math.round(cur.temp_C) : null,
+    condition: weatherZh(cur.weatherDesc?.[0]?.value),
+    humidity: cur.humidity != null ? Math.round(cur.humidity) : null,
     wind,
     updated_at: new Date().toISOString()
   })
 }
 
-function windDirection(deg) {
-  const dirs = ['北', '东北', '东', '东南', '南', '西南', '西', '西北']
-  const idx = Math.round(deg / 45) % 8
-  return `${dirs[idx]}风`
+const WEATHER_MAP = {
+  'Sunny': '晴', 'Clear': '晴', 'Partly Cloudy': '多云', 'Overcast': '阴',
+  'Mist': '薄雾', 'Fog': '雾', 'Light Rain': '小雨', 'Rain': '雨',
+  'Heavy Rain': '大雨', 'Drizzle': '毛毛雨', 'Thunderstorm': '雷阵雨',
+  'Snow': '雪', 'Light Snow': '小雪', 'Showers': '阵雨', 'Windy': '大风',
+  'Cloudy': '多云', 'Freezing Fog': '冻雾', 'Light Drizzle': '毛毛雨',
+  'Moderate Rain': '中雨', 'Patchy Rain': '零星小雨', 'Light Sleet': '小冻雨',
+  'Sleet': '冻雨', 'Heavy Snow': '大雪', 'Moderate Snow': '中雪'
+}
+
+function weatherZh(desc) {
+  if (!desc) return '未知'
+  return WEATHER_MAP[desc] || desc
+}
+
+function windDirZh(dir16) {
+  const map = { N: '北', NNE: '北东北', NE: '东北', ENE: '东东北', E: '东', ESE: '东东南', SE: '东南', SSE: '南东南', S: '南', SSW: '南西南', SW: '西南', WSW: '西西南', W: '西', WNW: '西西北', NW: '西北', NNW: '北西北' }
+  return `${map[dir16] || dir16}风`
 }
