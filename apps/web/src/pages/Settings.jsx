@@ -110,7 +110,7 @@ export default function Settings() {
               onChange={e => setSettings({ ...settings, weather_city: e.target.value })}
               placeholder="如：Shanghai / Beijing / Chengdu"
             />
-            <p className="hint">Dashboard 天气卡片将显示该城市的实时天气（OpenWeatherMap）。</p>
+            <p className="hint">Dashboard 天气卡片将显示该城市的实时天气（wttr.in，无需 API Key）。</p>
           </div>
         </div>
 

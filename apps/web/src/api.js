@@ -1,12 +1,34 @@
-// API 封装。token 由构建时注入（VITE_LIFEHUB_TOKEN），对用户可见，仅作简单保护。
-const TOKEN = import.meta.env.VITE_LIFEHUB_TOKEN || ''
+// API 封装。token 来自 URL ?key= 或 localStorage，用户可随时清除。
+const TOKEN_KEY = 'lifehub_token'
+
+export function getToken() {
+  return localStorage.getItem(TOKEN_KEY) || ''
+}
+
+export function setToken(token) {
+  if (token) localStorage.setItem(TOKEN_KEY, token)
+  else localStorage.removeItem(TOKEN_KEY)
+}
+
+export function tokenFromUrl() {
+  const params = new URLSearchParams(window.location.search)
+  const key = params.get('key')
+  if (key) {
+    setToken(key)
+    const clean = window.location.pathname + window.location.hash
+    window.history.replaceState(null, '', clean)
+    return true
+  }
+  return false
+}
 
 export async function api(path, options = {}) {
+  const token = getToken()
   const res = await fetch(path, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...(TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {})
     }
   })

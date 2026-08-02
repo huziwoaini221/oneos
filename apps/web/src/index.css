@@ -440,6 +440,17 @@ input:checked + .slider:before { transform: translateX(20px); }
   font-weight: 500;
 }
 
+/* ===== Login ===== */
+.login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 16px; }
+.login-card { background: #fff; border: 1px solid #e4e7eb; border-radius: 12px; padding: 32px; width: 100%; max-width: 340px; box-shadow: 0 8px 24px rgba(0,0,0,0.06); box-sizing: border-box; }
+.login-card h2 { margin: 0 0 4px; font-size: 22px; }
+.login-hint { margin: 0 0 20px; color: #64748b; font-size: 13px; }
+.login-card input { width: 100%; padding: 10px 12px; border: 1px solid #e4e7eb; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
+.login-card input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.15); }
+.login-card button { width: 100%; margin-top: 16px; padding: 10px; background: #3b82f6; color: #fff; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }
+.login-card button:disabled { opacity: 0.6; cursor: default; }
+.login-err { margin-top: 10px; color: #ef4444; font-size: 13px; }
+
 @media (max-width: 768px) {
   .dashboard-grid { grid-template-columns: 1fr; }
   .dashboard-sections { grid-template-columns: 1fr; }

@@ -16,7 +16,19 @@ export async function onRequestPost({ request, env }) {
     await env.DB.prepare(
       'UPDATE settings SET telegram_chat_id = ?, telegram_enabled = 1 WHERE id = 1'
     ).bind(chatId).run()
-    await sendText(token, chatId, 'LifeHub 已绑定，提醒将推送到这里。')
+    await sendText(token, chatId, 'LifeHub 已绑定，提醒将推送到这里。\n发送 /login 获取网页访问链接。')
+    return new Response('ok')
+  }
+
+  if (update.message && update.message.text === '/login') {
+    const chatId = String(update.message.chat.id)
+    const row = await env.DB.prepare('SELECT telegram_chat_id FROM settings WHERE id = 1').first()
+    if (!row || String(row.telegram_chat_id) !== chatId) {
+      await sendText(token, chatId, '未绑定。请先发送 /start 绑定。')
+      return new Response('ok')
+    }
+    const origin = new URL(request.url).origin
+    await sendText(token, chatId, `🔑 网页访问链接：\n${origin}/?key=${env.LIFEHUB_TOKEN}\n\n请妥善保管，勿转发给他人。`)
     return new Response('ok')
   }
 
