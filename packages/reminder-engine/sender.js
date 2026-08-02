@@ -27,26 +27,112 @@ export async function buildDailyDigest(db, settings, now) {
   const p = localParts(now, tz)
   const dayStart = localWallToUtc({ year: p.year, month: p.month, day: p.day, hour: 0, minute: 0 }, tz)
   const dayEnd = localWallToUtc({ year: p.year, month: p.month, day: p.day, hour: 23, minute: 59 }, tz)
+  const tomorrowStart = localWallToUtc({ year: p.year, month: p.month, day: p.day + 1, hour: 0, minute: 0 }, tz)
+  const tomorrowEnd = localWallToUtc({ year: p.year, month: p.month, day: p.day + 1, hour: 23, minute: 59 }, tz)
 
   const { results: tasks } = await db.prepare(
-    "SELECT title, deadline FROM tasks WHERE status IN ('pending', 'doing') AND deadline IS NOT NULL AND deadline >= ? AND deadline <= ?"
+    "SELECT title, description, deadline FROM tasks WHERE status IN ('pending', 'doing') AND deadline IS NOT NULL AND deadline >= ? AND deadline <= ?"
   ).bind(dayStart.toISOString(), dayEnd.toISOString()).all()
 
   const { results: events } = await db.prepare(
     'SELECT title, start_time, location FROM events WHERE start_time >= ? AND start_time <= ?'
   ).bind(dayStart.toISOString(), dayEnd.toISOString()).all()
 
-  const lines = []
+  const { results: tomorrowTasks } = await db.prepare(
+    "SELECT title, description, deadline FROM tasks WHERE status IN ('pending', 'doing') AND deadline IS NOT NULL AND deadline >= ? AND deadline <= ?"
+  ).bind(tomorrowStart.toISOString(), tomorrowEnd.toISOString()).all()
+
+  const { results: tomorrowEvents } = await db.prepare(
+    'SELECT title, start_time, location FROM events WHERE start_time >= ? AND start_time <= ?'
+  ).bind(tomorrowStart.toISOString(), tomorrowEnd.toISOString()).all()
+
+  const lines = [`【每日晨报】${p.month}月${p.day}日`]
+  const weekdayZh = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][p.weekday]
+  lines[0] = `【每日晨报】${p.month}月${p.day}日 ${weekdayZh}`
+
+  const weather = await fetchWeather(settings.weather_city)
+  if (weather) lines.push(`\n🌤 天气: ${weather.city} ${weather.condition} ${weather.temp}°C${weather.humidity != null ? ` 湿度${weather.humidity}%` : ''}`)
+
   if (tasks.length) {
-    lines.push('今日任务:')
-    for (const task of tasks) lines.push(`  - ${task.title} (${fmtTime(task.deadline, tz)})`)
+    lines.push('\n今日任务:')
+    for (const task of tasks) {
+      lines.push(`  - ${task.title} (${fmtTime(task.deadline, tz)})`)
+      if (task.description) lines.push(`    ${task.description}`)
+    }
   }
   if (events.length) {
-    lines.push('今日日程:')
+    lines.push('\n今日日程:')
     for (const event of events) lines.push(`  - ${event.title} ${fmtTime(event.start_time, tz)}${event.location ? ` @${event.location}` : ''}`)
   }
-  if (!lines.length) lines.push('今天没有任务和日程')
-  return `【每日晨报】\n${lines.join('\n')}`
+  if (!tasks.length && !events.length) lines.push('\n今天没有任务和日程')
+
+  const finance = await financeSummary(db, settings, now)
+  if (finance) lines.push(`\n${finance}`)
+
+  if (tomorrowTasks.length || tomorrowEvents.length) {
+    lines.push(`\n📌 明日预览: ${tomorrowTasks.length} 个任务 · ${tomorrowEvents.length} 个日程`)
+  }
+
+  return lines.join('\n')
+}
+
+async function fetchWeather(city) {
+  if (!city) return null
+  try {
+    const res = await fetch(`https://wttr.in/${encodeURIComponent(city)}?format=j1`)
+    if (!res.ok) return null
+    const data = await res.json()
+    const area = data.nearest_area?.[0]
+    const cur = data.current_condition?.[0] || {}
+    return {
+      city: area?.areaName?.[0]?.value || city,
+      temp: cur.temp_C != null ? Math.round(cur.temp_C) : null,
+      condition: weatherZh((cur.weatherDesc?.[0]?.value || '').trim()),
+      humidity: cur.humidity != null ? Math.round(cur.humidity) : null
+    }
+  } catch {
+    return null
+  }
+}
+
+const WEATHER_MAP = {
+  'Sunny': '晴', 'Clear': '晴', 'Partly Cloudy': '多云', 'Overcast': '阴',
+  'Mist': '薄雾', 'Fog': '雾', 'Light Rain': '小雨', 'Rain': '雨',
+  'Heavy Rain': '大雨', 'Drizzle': '毛毛雨', 'Thunderstorm': '雷阵雨',
+  'Snow': '雪', 'Light Snow': '小雪', 'Showers': '阵雨', 'Windy': '大风',
+  'Cloudy': '多云', 'Freezing Fog': '冻雾', 'Light Drizzle': '毛毛雨',
+  'Moderate Rain': '中雨', 'Patchy Rain': '零星小雨', 'Light Sleet': '小冻雨',
+  'Sleet': '冻雨', 'Heavy Snow': '大雪', 'Moderate Snow': '中雪'
+}
+
+function weatherZh(desc) {
+  if (!desc) return '未知'
+  const key = desc.trim()
+  return WEATHER_MAP[key] || key
+}
+
+async function financeSummary(db, settings, now) {
+  const tz = settings.timezone
+  const p = localParts(now, tz)
+  const monthStart = localWallToUtc({ year: p.year, month: p.month, day: 1, hour: 0, minute: 0 }, tz)
+  const nextMonth = p.month === 12 ? { year: p.year + 1, month: 1 } : { year: p.year, month: p.month + 1 }
+  const monthEnd = localWallToUtc({ year: nextMonth.year, month: nextMonth.month, day: 1, hour: 0, minute: 0 }, tz)
+  const yearStart = localWallToUtc({ year: p.year, month: 1, day: 1, hour: 0, minute: 0 }, tz)
+  const nextYear = localWallToUtc({ year: p.year + 1, month: 1, day: 1, hour: 0, minute: 0 }, tz)
+
+  const { results: month } = await db.prepare(
+    'SELECT SUM(CASE WHEN amount < 0 THEN -amount ELSE 0 END) AS income, SUM(CASE WHEN amount >= 0 THEN amount ELSE 0 END) AS expense FROM expenses WHERE date >= ? AND date < ?'
+  ).bind(monthStart.toISOString().slice(0, 10), monthEnd.toISOString().slice(0, 10)).all()
+
+  const { results: year } = await db.prepare(
+    'SELECT SUM(CASE WHEN amount < 0 THEN -amount ELSE 0 END) AS income, SUM(CASE WHEN amount >= 0 THEN amount ELSE 0 END) AS expense FROM expenses WHERE date >= ? AND date < ?'
+  ).bind(yearStart.toISOString().slice(0, 10), nextYear.toISOString().slice(0, 10)).all()
+
+  const m = month[0] || {}
+  const y = year[0] || {}
+  if (!m.income && !m.expense && !y.income && !y.expense) return null
+  const fmt = n => `¥${Math.round(n || 0)}`
+  return `💰 收支: 本月收入 ${fmt(m.income)} 支出 ${fmt(m.expense)} | 本年收入 ${fmt(y.income)} 支出 ${fmt(y.expense)}`
 }
 
 export function buildMessage(rule, item, settings) {
