@@ -1,0 +1,8 @@
+name = "lifehub-web"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-08-02"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "lifehub-db"
+database_id = "e59138af-f4ea-44b7-9c97-1a9749dfa4a8"
