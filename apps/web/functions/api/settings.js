@@ -1,4 +1,4 @@
-import { json, readJson } from '../_lib.js'
+import { json, readJson } from './_lib.js'
 
 const ALLOWED = ['timezone', 'telegram_chat_id', 'telegram_enabled', 'default_channel']
 
