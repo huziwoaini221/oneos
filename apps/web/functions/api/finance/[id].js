@@ -1,4 +1,4 @@
-import { getOne, update, remove } from '../../_lib.js'
+import { getOne, update, remove } from '../_lib.js'
 
 export async function onRequestGet({ env, params }) {
   return getOne(env.DB, 'expenses', params.id)

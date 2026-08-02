@@ -1,4 +1,4 @@
-import { json, list, create, readJson } from '../../_lib.js'
+import { json, list, create, readJson } from '../_lib.js'
 import { nextFireAt } from '@lifehub/reminder-engine/scheduler'
 
 const ALLOWED = ['name', 'type', 'source', 'condition_json', 'schedule', 'channel', 'enabled', 'next_fire_at']

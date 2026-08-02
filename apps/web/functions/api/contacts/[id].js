@@ -1,4 +1,4 @@
-import { getOne, update, remove } from '../../_lib.js'
+import { getOne, update, remove } from '../_lib.js'
 
 const ALLOWED = [
   'name', 'company', 'country', 'industry', 'phone', 'email',
