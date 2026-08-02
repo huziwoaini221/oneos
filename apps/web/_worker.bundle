@@ -1,0 +1,1465 @@
+------formdata-undici-094969408097
+Content-Disposition: form-data; name="metadata"
+
+{"main_module":"functionsWorker-0.14254137444851278.js"}
+------formdata-undici-094969408097
+Content-Disposition: form-data; name="functionsWorker-0.14254137444851278.js"; filename="functionsWorker-0.14254137444851278.js"
+Content-Type: application/javascript+module
+
+var __defProp = Object.defineProperty;
+var __name = (target, value) => __defProp(target, "name", { value, configurable: true });
+
+// ../../../packages/reminder-engine/scheduler.js
+var formatters = /* @__PURE__ */ new Map();
+function getFormatter(timeZone) {
+  let fmt = formatters.get(timeZone);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      weekday: "short",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+      hour12: false
+    });
+    formatters.set(timeZone, fmt);
+  }
+  return fmt;
+}
+__name(getFormatter, "getFormatter");
+var WEEKDAYS = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+function localParts(date, timeZone) {
+  const fmt = getFormatter(timeZone);
+  const map = {};
+  for (const part of fmt.formatToParts(date))
+    map[part.type] = part.value;
+  let hour = parseInt(map.hour, 10);
+  if (hour === 24)
+    hour = 0;
+  return {
+    year: parseInt(map.year, 10),
+    month: parseInt(map.month, 10),
+    day: parseInt(map.day, 10),
+    hour,
+    minute: parseInt(map.minute, 10),
+    weekday: WEEKDAYS[map.weekday]
+  };
+}
+__name(localParts, "localParts");
+function parseOffset(tzName) {
+  const m = String(tzName).match(/GMT([+-])(\d+):?(\d+)?/);
+  if (!m)
+    return 0;
+  const sign = m[1] === "+" ? 1 : -1;
+  const hours = parseInt(m[2], 10);
+  const minutes = parseInt(m[3] || "0", 10);
+  return sign * (hours * 3600 + minutes * 60) * 1e3;
+}
+__name(parseOffset, "parseOffset");
+function getOffsetMs(date, timeZone) {
+  const fmt = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "shortOffset", hour12: false });
+  const parts = fmt.formatToParts(date);
+  const tzPart = parts.find((p) => p.type === "timeZoneName");
+  return tzPart ? parseOffset(tzPart.value) : 0;
+}
+__name(getOffsetMs, "getOffsetMs");
+function localWallToUtc(target, timeZone) {
+  const refUtc = new Date(Date.UTC(target.year, target.month - 1, target.day, 12, 0));
+  const offsetMs = getOffsetMs(refUtc, timeZone);
+  const targetLocalMs = Date.UTC(target.year, target.month - 1, target.day, target.hour, target.minute);
+  return new Date(targetLocalMs - offsetMs);
+}
+__name(localWallToUtc, "localWallToUtc");
+function parseCron(expr) {
+  const parts = String(expr || "").trim().split(/\s+/);
+  if (parts.length !== 5)
+    return null;
+  const [minute, hour, dom, month, dow] = parts;
+  if (month !== "*")
+    return null;
+  const m = minute === "*" ? null : parseInt(minute, 10);
+  const h = hour === "*" ? null : parseInt(hour, 10);
+  const d = dom === "*" ? null : parseInt(dom, 10);
+  const w = dow === "*" ? null : parseInt(dow, 10);
+  if (m === null || h === null)
+    return null;
+  if (m < 0 || m > 59 || h < 0 || h > 23)
+    return null;
+  if (d !== null && (d < 1 || d > 31))
+    return null;
+  if (w !== null && (w < 0 || w > 6))
+    return null;
+  if (d !== null && w !== null)
+    return null;
+  return { minute: m, hour: h, dayOfMonth: d, dayOfWeek: w };
+}
+__name(parseCron, "parseCron");
+function deriveNotifyInterval(expr) {
+  const cron = parseCron(expr);
+  if (!cron)
+    return 86400;
+  if (cron.dayOfMonth !== null)
+    return 2678400;
+  if (cron.dayOfWeek !== null)
+    return 604800;
+  return 86400;
+}
+__name(deriveNotifyInterval, "deriveNotifyInterval");
+function nextFireAt(fromDate, timeZone, expr) {
+  const cron = parseCron(expr);
+  if (!cron)
+    return null;
+  const from = new Date(fromDate);
+  const nowParts = localParts(from, timeZone);
+  const base = { hour: cron.hour, minute: cron.minute };
+  const candidates = [];
+  if (cron.dayOfWeek === null && cron.dayOfMonth === null) {
+    candidates.push({ ...base, year: nowParts.year, month: nowParts.month, day: nowParts.day });
+    candidates.push({ ...base, year: nowParts.year, month: nowParts.month, day: nowParts.day + 1 });
+  } else if (cron.dayOfWeek !== null) {
+    for (let add = 0; add <= 7; add++) {
+      const probe = new Date(Date.UTC(nowParts.year, nowParts.month - 1, nowParts.day) + add * 864e5);
+      const p = localParts(probe, timeZone);
+      if (p.weekday === cron.dayOfWeek) {
+        candidates.push({ ...base, year: p.year, month: p.month, day: p.day });
+      }
+    }
+  } else {
+    for (let add = 0; add <= 62; add++) {
+      const probe = new Date(Date.UTC(nowParts.year, nowParts.month - 1, nowParts.day) + add * 864e5);
+      const p = localParts(probe, timeZone);
+      if (p.day === cron.dayOfMonth) {
+        candidates.push({ ...base, year: p.year, month: p.month, day: p.day });
+      }
+    }
+  }
+  for (const c of candidates) {
+    const t = localWallToUtc(c, timeZone);
+    if (t.getTime() > from.getTime())
+      return t;
+  }
+  return null;
+}
+__name(nextFireAt, "nextFireAt");
+
+// ../../../packages/reminder-engine/loader.js
+async function loadCandidates(db, rule, now, timezone) {
+  switch (rule.source) {
+    case "tasks": {
+      const { results } = await db.prepare(
+        "SELECT * FROM tasks WHERE status NOT IN ('completed', 'cancelled') AND deadline IS NOT NULL"
+      ).all();
+      return results;
+    }
+    case "events": {
+      const horizon = new Date(now.getTime() - 2 * 3600 * 1e3).toISOString();
+      const { results } = await db.prepare("SELECT * FROM events WHERE start_time >= ?").bind(horizon).all();
+      return results;
+    }
+    case "contacts": {
+      const { results } = await db.prepare("SELECT * FROM contacts WHERE last_contact IS NOT NULL").all();
+      return results;
+    }
+    case "finance": {
+      const p = localParts(now, timezone);
+      const prefix = `${p.year}-${String(p.month).padStart(2, "0")}`;
+      const { results } = await db.prepare(
+        "SELECT category AS id, category, SUM(amount) AS total FROM expenses WHERE substr(date, 1, 7) = ? GROUP BY category"
+      ).bind(prefix).all();
+      return results;
+    }
+    default:
+      return [];
+  }
+}
+__name(loadCandidates, "loadCandidates");
+
+// ../../../packages/reminder-engine/evaluator.js
+function evaluate(rule, item, now) {
+  const cond = parseCondition(rule);
+  const t = now.getTime();
+  switch (cond.type) {
+    case "before": {
+      if (cond.minutes == null || !item.start_time)
+        return false;
+      const diffMin = (new Date(item.start_time).getTime() - t) / 6e4;
+      return diffMin >= 0 && diffMin <= cond.minutes;
+    }
+    case "days_since": {
+      const field = cond.field || "last_contact";
+      if (!item[field])
+        return false;
+      const days = Math.floor((t - new Date(item[field]).getTime()) / 864e5);
+      const operator = cond.operator || "days_gt";
+      if (operator === "days_gt")
+        return days > cond.value;
+      if (operator === "days_gte")
+        return days >= cond.value;
+      return false;
+    }
+    case "deadline_before": {
+      if (!item.deadline)
+        return false;
+      if (item.status === "completed" || item.status === "cancelled")
+        return false;
+      const diffHours = (new Date(item.deadline).getTime() - t) / 36e5;
+      return diffHours >= 0 && diffHours <= (cond.hours ?? 24);
+    }
+    case "over_budget": {
+      return typeof item.total === "number" && item.total > cond.amount;
+    }
+    default:
+      return false;
+  }
+}
+__name(evaluate, "evaluate");
+function parseCondition(rule) {
+  try {
+    return JSON.parse(rule.condition_json || "{}");
+  } catch {
+    return {};
+  }
+}
+__name(parseCondition, "parseCondition");
+
+// ../../../packages/reminder-engine/deduplicator.js
+async function canNotify(db, rule, objectType, objectId, intervalSec) {
+  const row = await db.prepare(
+    "SELECT MAX(sent_time) AS last_sent FROM reminder_logs WHERE rule_id = ? AND object_type = ? AND object_id = ?"
+  ).bind(rule.id, objectType, String(objectId)).first();
+  if (!row || !row.last_sent)
+    return true;
+  const last = new Date(row.last_sent).getTime();
+  return Date.now() - last >= intervalSec * 1e3;
+}
+__name(canNotify, "canNotify");
+
+// ../../../packages/reminder-engine/sender.js
+async function sendTelegram(env, settings, text) {
+  const token = env.TELEGRAM_BOT_TOKEN;
+  const chatId = settings?.telegram_chat_id;
+  if (!token || !chatId)
+    throw new Error("telegram not configured (need TELEGRAM_BOT_TOKEN and chat_id)");
+  if (!settings.telegram_enabled)
+    return;
+  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: Number(chatId), text })
+  });
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText);
+    throw new Error(`telegram send failed (${res.status}): ${err}`);
+  }
+  return res.json();
+}
+__name(sendTelegram, "sendTelegram");
+async function buildDailyDigest(db, settings, now) {
+  const tz = settings.timezone;
+  const p = localParts(now, tz);
+  const dayStart = localWallToUtc({ year: p.year, month: p.month, day: p.day, hour: 0, minute: 0 }, tz);
+  const dayEnd = localWallToUtc({ year: p.year, month: p.month, day: p.day, hour: 23, minute: 59 }, tz);
+  const { results: tasks } = await db.prepare(
+    "SELECT title, deadline FROM tasks WHERE status IN ('pending', 'doing') AND deadline IS NOT NULL AND deadline >= ? AND deadline <= ?"
+  ).bind(dayStart.toISOString(), dayEnd.toISOString()).all();
+  const { results: events } = await db.prepare(
+    "SELECT title, start_time, location FROM events WHERE start_time >= ? AND start_time <= ?"
+  ).bind(dayStart.toISOString(), dayEnd.toISOString()).all();
+  const lines = [];
+  if (tasks.length) {
+    lines.push("\u4ECA\u65E5\u4EFB\u52A1:");
+    for (const task of tasks)
+      lines.push(`  - ${task.title} (${fmtTime(task.deadline, tz)})`);
+  }
+  if (events.length) {
+    lines.push("\u4ECA\u65E5\u65E5\u7A0B:");
+    for (const event of events)
+      lines.push(`  - ${event.title} ${fmtTime(event.start_time, tz)}${event.location ? ` @${event.location}` : ""}`);
+  }
+  if (!lines.length)
+    lines.push("\u4ECA\u5929\u6CA1\u6709\u4EFB\u52A1\u548C\u65E5\u7A0B");
+  return `\u3010\u6BCF\u65E5\u6668\u62A5\u3011
+${lines.join("\n")}`;
+}
+__name(buildDailyDigest, "buildDailyDigest");
+function buildMessage(rule, item, settings) {
+  const tz = settings.timezone;
+  switch (rule.source) {
+    case "contacts": {
+      const days = Math.floor((Date.now() - new Date(item.last_contact).getTime()) / 864e5);
+      return `\u3010${rule.name}\u3011
+${item.name} \u5DF2 ${days} \u5929\u672A\u8054\u7CFB`;
+    }
+    case "tasks":
+      return `\u3010${rule.name}\u3011
+\u4EFB\u52A1 "${item.title}" \u5373\u5C06\u5230\u671F`;
+    case "events":
+      return `\u3010${rule.name}\u3011
+"${item.title}" \u5C06\u4E8E ${fmtTime(item.start_time, tz)} \u5F00\u59CB${item.location ? ` @${item.location}` : ""}`;
+    case "finance":
+      return `\u3010${rule.name}\u3011
+${item.category} \u672C\u6708\u652F\u51FA ${item.total}\uFF0C\u8D85\u51FA\u9884\u7B97`;
+    default:
+      return `\u3010${rule.name}\u3011
+\u6709\u65B0\u7684\u63D0\u9192`;
+  }
+}
+__name(buildMessage, "buildMessage");
+function fmtTime(iso, timezone) {
+  return new Date(iso).toLocaleString("zh-CN", {
+    timeZone: timezone,
+    hour12: false,
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+__name(fmtTime, "fmtTime");
+
+// ../../../packages/reminder-engine/runner.js
+async function runReminderEngine(env) {
+  const db = env.DB;
+  const settings = await getSettings(db);
+  const { results: rules } = await db.prepare("SELECT * FROM reminder_rules WHERE enabled = 1").all();
+  for (const rule of rules) {
+    try {
+      if (rule.type === "time") {
+        await processTimeRule(db, env, settings, rule);
+      } else if (rule.type === "data") {
+        await processDataRule(db, env, settings, rule);
+      }
+    } catch (err) {
+      await logReminder(db, rule, "rule", rule.id, "failed", null);
+      console.error(`[reminder] rule ${rule.id} failed:`, err.message);
+    }
+  }
+}
+__name(runReminderEngine, "runReminderEngine");
+async function getSettings(db) {
+  const row = await db.prepare("SELECT * FROM settings WHERE id = 1").first();
+  return row || { timezone: "Asia/Shanghai", telegram_chat_id: null, telegram_enabled: 1, default_channel: "telegram" };
+}
+__name(getSettings, "getSettings");
+async function processTimeRule(db, env, settings, rule) {
+  const now = /* @__PURE__ */ new Date();
+  if (!rule.next_fire_at) {
+    const next2 = nextFireAt(now, settings.timezone, rule.schedule);
+    if (!next2)
+      throw new Error(`unsupported schedule: ${rule.schedule}`);
+    await db.prepare("UPDATE reminder_rules SET next_fire_at = ? WHERE id = ?").bind(next2.toISOString(), rule.id).run();
+    return;
+  }
+  if (now.getTime() < new Date(rule.next_fire_at).getTime())
+    return;
+  const intervalSec = deriveNotifyInterval(rule.schedule);
+  const objectId = String(rule.id);
+  if (await canNotify(db, rule, "rule", objectId, intervalSec)) {
+    const text = await buildDailyDigest(db, settings, now);
+    await sendTelegram(env, settings, text);
+    await logReminder(db, rule, "rule", objectId, "sent", now.toISOString());
+  }
+  const next = nextFireAt(now, settings.timezone, rule.schedule);
+  if (!next)
+    throw new Error(`unsupported schedule: ${rule.schedule}`);
+  await db.prepare("UPDATE reminder_rules SET next_fire_at = ? WHERE id = ?").bind(next.toISOString(), rule.id).run();
+}
+__name(processTimeRule, "processTimeRule");
+async function processDataRule(db, env, settings, rule) {
+  const now = /* @__PURE__ */ new Date();
+  const cond = parseCondition2(rule);
+  const intervalSec = cond.notify_interval || 86400;
+  const items = await loadCandidates(db, rule, now, settings.timezone);
+  for (const item of items) {
+    if (!evaluate(rule, item, now))
+      continue;
+    const objectType = rule.source;
+    const objectId = String(item.id);
+    if (!await canNotify(db, rule, objectType, objectId, intervalSec))
+      continue;
+    const text = buildMessage(rule, item, settings);
+    await sendTelegram(env, settings, text);
+    await logReminder(db, rule, objectType, objectId, "sent", now.toISOString());
+  }
+}
+__name(processDataRule, "processDataRule");
+function parseCondition2(rule) {
+  try {
+    return JSON.parse(rule.condition_json || "{}");
+  } catch {
+    return {};
+  }
+}
+__name(parseCondition2, "parseCondition");
+async function logReminder(db, rule, objectType, objectId, status, sentTime) {
+  await db.prepare(
+    "INSERT INTO reminder_logs (rule_id, object_type, object_id, status, trigger_time, sent_time) VALUES (?, ?, ?, ?, ?, ?)"
+  ).bind(rule.id, objectType, objectId, status, (/* @__PURE__ */ new Date()).toISOString(), sentTime ?? (/* @__PURE__ */ new Date()).toISOString()).run();
+}
+__name(logReminder, "logReminder");
+
+// api/cron/reminders.js
+async function onRequestPost({ request, env }) {
+  const auth = request.headers.get("Authorization");
+  if (auth !== `Bearer ${env.CRON_SECRET}`) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  await runReminderEngine(env);
+  return new Response("OK");
+}
+__name(onRequestPost, "onRequestPost");
+
+// api/_lib.js
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "Content-Type": "application/json" }
+  });
+}
+__name(json, "json");
+async function readJson(request) {
+  try {
+    return await request.json();
+  } catch {
+    return {};
+  }
+}
+__name(readJson, "readJson");
+async function list(db, table, orderBy = "id DESC") {
+  const { results } = await db.prepare(`SELECT * FROM ${table} ORDER BY ${orderBy}`).all();
+  return json(results);
+}
+__name(list, "list");
+async function getOne(db, table, id) {
+  const result = await db.prepare(`SELECT * FROM ${table} WHERE id = ?`).bind(id).first();
+  if (!result)
+    return json({ error: "Not found" }, 404);
+  return json(result);
+}
+__name(getOne, "getOne");
+async function create(db, table, allowedFields, request, options = {}) {
+  const body = await readJson(request);
+  const { required = [] } = options;
+  for (const field of required) {
+    if (!body[field])
+      return json({ error: `Missing ${field}` }, 400);
+  }
+  const fields = [];
+  const values = [];
+  const placeholders = [];
+  for (const key of allowedFields) {
+    if (body[key] !== void 0) {
+      fields.push(key);
+      values.push(body[key]);
+      placeholders.push("?");
+    }
+  }
+  const stmt = db.prepare(`INSERT INTO ${table} (${fields.join(", ")}) VALUES (${placeholders.join(", ")})`);
+  const info = await stmt.bind(...values).run();
+  return json({ id: info.meta.last_row_id }, 201);
+}
+__name(create, "create");
+async function update(db, table, allowedFields, request, id) {
+  const body = await readJson(request);
+  const fields = [];
+  const values = [];
+  for (const key of allowedFields) {
+    if (body[key] !== void 0) {
+      fields.push(`${key} = ?`);
+      values.push(body[key]);
+    }
+  }
+  if (!fields.length)
+    return json({ error: "No fields to update" }, 400);
+  values.push(id);
+  const stmt = db.prepare(`UPDATE ${table} SET ${fields.join(", ")} WHERE id = ?`);
+  await stmt.bind(...values).run();
+  return json({ success: true });
+}
+__name(update, "update");
+async function remove(db, table, id) {
+  await db.prepare(`DELETE FROM ${table} WHERE id = ?`).bind(id).run();
+  return json({ success: true });
+}
+__name(remove, "remove");
+
+// api/contacts/[id].js
+var ALLOWED = [
+  "name",
+  "company",
+  "country",
+  "industry",
+  "phone",
+  "email",
+  "wechat",
+  "telegram",
+  "level",
+  "last_contact",
+  "next_followup",
+  "notes"
+];
+async function onRequestGet({ env, params }) {
+  return getOne(env.DB, "contacts", params.id);
+}
+__name(onRequestGet, "onRequestGet");
+async function onRequestPatch({ env, request, params }) {
+  return update(env.DB, "contacts", params.id, ALLOWED, request);
+}
+__name(onRequestPatch, "onRequestPatch");
+async function onRequestDelete({ env, params }) {
+  return remove(env.DB, "contacts", params.id);
+}
+__name(onRequestDelete, "onRequestDelete");
+
+// api/events/[id].js
+var ALLOWED2 = ["title", "start_time", "end_time", "location", "notes"];
+async function onRequestGet2({ env, params }) {
+  return getOne(env.DB, "events", params.id);
+}
+__name(onRequestGet2, "onRequestGet");
+async function onRequestPatch2({ env, request, params }) {
+  return update(env.DB, "events", params.id, ALLOWED2, request);
+}
+__name(onRequestPatch2, "onRequestPatch");
+async function onRequestDelete2({ env, params }) {
+  return remove(env.DB, "events", params.id);
+}
+__name(onRequestDelete2, "onRequestDelete");
+
+// api/finance/[id].js
+async function onRequestGet3({ env, params }) {
+  return getOne(env.DB, "expenses", params.id);
+}
+__name(onRequestGet3, "onRequestGet");
+async function onRequestDelete3({ env, params }) {
+  return remove(env.DB, "expenses", params.id);
+}
+__name(onRequestDelete3, "onRequestDelete");
+
+// api/reminders/[id].js
+var ALLOWED3 = ["name", "type", "source", "condition_json", "schedule", "channel", "enabled", "next_fire_at"];
+async function onRequestGet4({ env, params }) {
+  return getOne(env.DB, "reminder_rules", params.id);
+}
+__name(onRequestGet4, "onRequestGet");
+async function onRequestPatch3({ env, request, params }) {
+  const body = await readJson(request);
+  const data = {};
+  for (const k of ALLOWED3) {
+    if (body[k] !== void 0)
+      data[k] = body[k];
+  }
+  if (!Object.keys(data).length)
+    return json({ error: "no valid fields" }, 400);
+  if (data.type === "time" && data.schedule) {
+    const settings = await env.DB.prepare("SELECT * FROM settings WHERE id = 1").first();
+    const next = nextFireAt(/* @__PURE__ */ new Date(), settings?.timezone || "Asia/Shanghai", data.schedule);
+    if (!next)
+      return json({ error: `unsupported schedule: ${data.schedule}` }, 400);
+    data.next_fire_at = next.toISOString();
+  }
+  const sets = Object.keys(data).map((k) => `${k} = ?`).join(", ");
+  await env.DB.prepare(`UPDATE reminder_rules SET ${sets} WHERE id = ?`).bind(...Object.values(data), params.id).run();
+  return getOne(env.DB, "reminder_rules", params.id);
+}
+__name(onRequestPatch3, "onRequestPatch");
+async function onRequestDelete4({ env, params }) {
+  return remove(env.DB, "reminder_rules", params.id);
+}
+__name(onRequestDelete4, "onRequestDelete");
+
+// api/tasks/[id].js
+var ALLOWED4 = ["title", "description", "priority", "status", "deadline", "completed_at"];
+async function onRequestGet5({ env, params }) {
+  return getOne(env.DB, "tasks", params.id);
+}
+__name(onRequestGet5, "onRequestGet");
+async function onRequestPatch4({ env, request, params }) {
+  return update(env.DB, "tasks", params.id, ALLOWED4, request);
+}
+__name(onRequestPatch4, "onRequestPatch");
+async function onRequestDelete5({ env, params }) {
+  return remove(env.DB, "tasks", params.id);
+}
+__name(onRequestDelete5, "onRequestDelete");
+
+// api/contacts/index.js
+var ALLOWED5 = [
+  "name",
+  "company",
+  "country",
+  "industry",
+  "phone",
+  "email",
+  "wechat",
+  "telegram",
+  "level",
+  "last_contact",
+  "next_followup",
+  "notes"
+];
+async function onRequestGet6({ env, request }) {
+  const url = new URL(request.url);
+  const level = url.searchParams.get("level");
+  if (level) {
+    const { results } = await env.DB.prepare("SELECT * FROM contacts WHERE level = ? ORDER BY name ASC").bind(level).all();
+    return json(results);
+  }
+  return list(env.DB, "contacts", "name ASC");
+}
+__name(onRequestGet6, "onRequestGet");
+async function onRequestPost2({ env, request }) {
+  return create(env.DB, "contacts", ALLOWED5, request, { required: ["name"] });
+}
+__name(onRequestPost2, "onRequestPost");
+
+// api/events/index.js
+var ALLOWED6 = ["title", "start_time", "end_time", "location", "notes"];
+async function onRequestGet7({ env, request }) {
+  const url = new URL(request.url);
+  const from = url.searchParams.get("from");
+  const to = url.searchParams.get("to");
+  if (from || to) {
+    let sql = "SELECT * FROM events WHERE 1=1";
+    const args = [];
+    if (from) {
+      sql += " AND start_time >= ?";
+      args.push(from);
+    }
+    if (to) {
+      sql += " AND start_time <= ?";
+      args.push(to);
+    }
+    const { results } = await env.DB.prepare(`${sql} ORDER BY start_time ASC`).bind(...args).all();
+    return json(results);
+  }
+  return list(env.DB, "events", "start_time ASC");
+}
+__name(onRequestGet7, "onRequestGet");
+async function onRequestPost3({ env, request }) {
+  return create(env.DB, "events", ALLOWED6, request, { required: ["title"] });
+}
+__name(onRequestPost3, "onRequestPost");
+
+// api/finance/index.js
+var ALLOWED7 = ["amount", "category", "date", "note"];
+async function onRequestGet8({ env, request }) {
+  const url = new URL(request.url);
+  const month = url.searchParams.get("month");
+  if (month) {
+    const { results } = await env.DB.prepare(
+      "SELECT * FROM expenses WHERE substr(date, 1, 7) = ? ORDER BY date DESC"
+    ).bind(month).all();
+    return json(results);
+  }
+  return list(env.DB, "expenses", "date DESC");
+}
+__name(onRequestGet8, "onRequestGet");
+async function onRequestPost4({ env, request }) {
+  return create(env.DB, "expenses", ALLOWED7, request, { required: ["amount", "category", "date"] });
+}
+__name(onRequestPost4, "onRequestPost");
+
+// api/reminders/index.js
+async function onRequestGet9({ env, request }) {
+  const url = new URL(request.url);
+  if (url.searchParams.get("scope") === "logs") {
+    const { results: results2 } = await env.DB.prepare("SELECT * FROM reminder_logs ORDER BY id DESC LIMIT 50").all();
+    return json(results2);
+  }
+  const { results } = await env.DB.prepare("SELECT * FROM reminder_rules ORDER BY id ASC").all();
+  return json(results);
+}
+__name(onRequestGet9, "onRequestGet");
+async function onRequestPost5({ env, request }) {
+  const body = await readJson(request);
+  if (!body.name || !body.type)
+    return json({ error: "missing fields: name, type" }, 400);
+  if (body.type !== "time" && body.type !== "data") {
+    return json({ error: "type must be time or data" }, 400);
+  }
+  const data = { name: body.name, type: body.type, channel: body.channel ?? "telegram", enabled: body.enabled ?? 1 };
+  for (const k of ["source", "condition_json", "schedule", "next_fire_at"]) {
+    if (body[k] !== void 0)
+      data[k] = body[k];
+  }
+  if (body.type === "time") {
+    if (!body.schedule)
+      return json({ error: "schedule required for time rule" }, 400);
+    const settings = await env.DB.prepare("SELECT * FROM settings WHERE id = 1").first();
+    const next = nextFireAt(/* @__PURE__ */ new Date(), settings?.timezone || "Asia/Shanghai", body.schedule);
+    if (!next)
+      return json({ error: `unsupported schedule: ${body.schedule}` }, 400);
+    data.next_fire_at = next.toISOString();
+  }
+  const keys = Object.keys(data);
+  const placeholders = keys.map(() => "?").join(", ");
+  const res = await env.DB.prepare(`INSERT INTO reminder_rules (${keys.join(", ")}) VALUES (${placeholders})`).bind(...keys.map((k) => data[k])).run();
+  const { results } = await env.DB.prepare("SELECT * FROM reminder_rules WHERE id = ?").bind(res.meta.last_row_id).all();
+  return json(results[0], 201);
+}
+__name(onRequestPost5, "onRequestPost");
+
+// api/settings.js
+var ALLOWED8 = ["timezone", "telegram_chat_id", "telegram_enabled", "default_channel"];
+async function onRequestGet10({ env }) {
+  const row = await env.DB.prepare("SELECT * FROM settings WHERE id = 1").first();
+  return json(row || {});
+}
+__name(onRequestGet10, "onRequestGet");
+async function onRequestPatch5({ env, request }) {
+  const body = await readJson(request);
+  const data = {};
+  for (const k of ALLOWED8) {
+    if (body[k] !== void 0)
+      data[k] = body[k];
+  }
+  if (!Object.keys(data).length)
+    return json({ error: "no valid fields" }, 400);
+  const sets = Object.keys(data).map((k) => `${k} = ?`).join(", ");
+  await env.DB.prepare(`UPDATE settings SET ${sets} WHERE id = 1`).bind(...Object.values(data)).run();
+  const row = await env.DB.prepare("SELECT * FROM settings WHERE id = 1").first();
+  return json(row);
+}
+__name(onRequestPatch5, "onRequestPatch");
+async function onRequestPost6({ env, request }) {
+  const body = await readJson(request);
+  const { chat_id, text } = body;
+  const token = env.TELEGRAM_BOT_TOKEN;
+  if (!token || !chat_id)
+    return json({ error: "missing token or chat_id" }, 400);
+  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: Number(chat_id), text: text || "LifeHub \u6D4B\u8BD5\u6D88\u606F" })
+  });
+  if (!res.ok) {
+    const err = await res.text().catch(() => res.statusText);
+    return json({ error: `telegram send failed: ${err}` }, 500);
+  }
+  return json({ ok: true });
+}
+__name(onRequestPost6, "onRequestPost");
+
+// api/tasks/index.js
+var ALLOWED9 = ["title", "description", "priority", "status", "deadline", "completed_at"];
+async function onRequestGet11({ env, request }) {
+  const url = new URL(request.url);
+  const status = url.searchParams.get("status");
+  if (status) {
+    const { results } = await env.DB.prepare("SELECT * FROM tasks WHERE status = ? ORDER BY deadline ASC").bind(status).all();
+    return json(results);
+  }
+  return list(env.DB, "tasks", "status ASC, deadline ASC");
+}
+__name(onRequestGet11, "onRequestGet");
+async function onRequestPost7({ env, request }) {
+  return create(env.DB, "tasks", ALLOWED9, request, { required: ["title"] });
+}
+__name(onRequestPost7, "onRequestPost");
+
+// api/telegram.js
+async function onRequestPost8({ request, env }) {
+  const secretHeader = request.headers.get("X-Telegram-Bot-Api-Secret-Token");
+  if (secretHeader && env.TELEGRAM_BOT_TOKEN && secretHeader !== env.TELEGRAM_BOT_TOKEN) {
+    return new Response("unauthorized", { status: 401 });
+  }
+  const token = env.TELEGRAM_BOT_TOKEN;
+  const update2 = await request.json().catch(() => null);
+  if (!update2)
+    return new Response("ok");
+  if (update2.message && update2.message.text === "/start") {
+    const chatId = String(update2.message.chat.id);
+    await env.DB.prepare(
+      "UPDATE settings SET telegram_chat_id = ?, telegram_enabled = 1 WHERE id = 1"
+    ).bind(chatId).run();
+    await sendText(token, chatId, "LifeHub \u5DF2\u7ED1\u5B9A\uFF0C\u63D0\u9192\u5C06\u63A8\u9001\u5230\u8FD9\u91CC\u3002");
+    return new Response("ok");
+  }
+  if (update2.callback_query) {
+    const q = update2.callback_query;
+    const chatId = q.message && q.message.chat.id;
+    const data = q.data || "";
+    if (data.startsWith("task_complete:")) {
+      const taskId = data.split(":")[1];
+      await env.DB.prepare(
+        "UPDATE tasks SET status = 'completed', completed_at = ?, updated_at = ? WHERE id = ?"
+      ).bind((/* @__PURE__ */ new Date()).toISOString(), (/* @__PURE__ */ new Date()).toISOString(), taskId).run();
+      if (chatId)
+        await sendText(token, String(chatId), `\u4EFB\u52A1 #${taskId} \u5DF2\u5B8C\u6210\u3002`);
+    }
+    return new Response("ok");
+  }
+  return new Response("ok");
+}
+__name(onRequestPost8, "onRequestPost");
+async function sendText(token, chatId, text) {
+  if (!token)
+    return;
+  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: Number(chatId), text })
+  });
+}
+__name(sendText, "sendText");
+
+// ../.wrangler/tmp/pages-l9Y5pr/functionsRoutes-0.6894744837037132.mjs
+var routes = [
+  {
+    routePath: "/api/cron/reminders",
+    mountPath: "/api/cron",
+    method: "POST",
+    middlewares: [],
+    modules: [onRequestPost]
+  },
+  {
+    routePath: "/api/contacts/:id",
+    mountPath: "/api/contacts",
+    method: "DELETE",
+    middlewares: [],
+    modules: [onRequestDelete]
+  },
+  {
+    routePath: "/api/contacts/:id",
+    mountPath: "/api/contacts",
+    method: "GET",
+    middlewares: [],
+    modules: [onRequestGet]
+  },
+  {
+    routePath: "/api/contacts/:id",
+    mountPath: "/api/contacts",
+    method: "PATCH",
+    middlewares: [],
+    modules: [onRequestPatch]
+  },
+  {
+    routePath: "/api/events/:id",
+    mountPath: "/api/events",
+    method: "DELETE",
+    middlewares: [],
+    modules: [onRequestDelete2]
+  },
+  {
+    routePath: "/api/events/:id",
+    mountPath: "/api/events",
+    method: "GET",
+    middlewares: [],
+    modules: [onRequestGet2]
+  },
+  {
+    routePath: "/api/events/:id",
+    mountPath: "/api/events",
+    method: "PATCH",
+    middlewares: [],
+    modules: [onRequestPatch2]
+  },
+  {
+    routePath: "/api/finance/:id",
+    mountPath: "/api/finance",
+    method: "DELETE",
+    middlewares: [],
+    modules: [onRequestDelete3]
+  },
+  {
+    routePath: "/api/finance/:id",
+    mountPath: "/api/finance",
+    method: "GET",
+    middlewares: [],
+    modules: [onRequestGet3]
+  },
+  {
+    routePath: "/api/reminders/:id",
+    mountPath: "/api/reminders",
+    method: "DELETE",
+    middlewares: [],
+    modules: [onRequestDelete4]
+  },
+  {
+    routePath: "/api/reminders/:id",
+    mountPath: "/api/reminders",
+    method: "GET",
+    middlewares: [],
+    modules: [onRequestGet4]
+  },
+  {
+    routePath: "/api/reminders/:id",
+    mountPath: "/api/reminders",
+    method: "PATCH",
+    middlewares: [],
+    modules: [onRequestPatch3]
+  },
+  {
+    routePath: "/api/tasks/:id",
+    mountPath: "/api/tasks",
+    method: "DELETE",
+    middlewares: [],
+    modules: [onRequestDelete5]
+  },
+  {
+    routePath: "/api/tasks/:id",
+    mountPath: "/api/tasks",
+    method: "GET",
+    middlewares: [],
+    modules: [onRequestGet5]
+  },
+  {
+    routePath: "/api/tasks/:id",
+    mountPath: "/api/tasks",
+    method: "PATCH",
+    middlewares: [],
+    modules: [onRequestPatch4]
+  },
+  {
+    routePath: "/api/contacts",
+    mountPath: "/api/contacts",
+    method: "GET",
+    middlewares: [],
+    modules: [onRequestGet6]
+  },
+  {
+    routePath: "/api/contacts",
+    mountPath: "/api/contacts",
+    method: "POST",
+    middlewares: [],
+    modules: [onRequestPost2]
+  },
+  {
+    routePath: "/api/events",
+    mountPath: "/api/events",
+    method: "GET",
+    middlewares: [],
+    modules: [onRequestGet7]
+  },
+  {
+    routePath: "/api/events",
+    mountPath: "/api/events",
+    method: "POST",
+    middlewares: [],
+    modules: [onRequestPost3]
+  },
+  {
+    routePath: "/api/finance",
+    mountPath: "/api/finance",
+    method: "GET",
+    middlewares: [],
+    modules: [onRequestGet8]
+  },
+  {
+    routePath: "/api/finance",
+    mountPath: "/api/finance",
+    method: "POST",
+    middlewares: [],
+    modules: [onRequestPost4]
+  },
+  {
+    routePath: "/api/reminders",
+    mountPath: "/api/reminders",
+    method: "GET",
+    middlewares: [],
+    modules: [onRequestGet9]
+  },
+  {
+    routePath: "/api/reminders",
+    mountPath: "/api/reminders",
+    method: "POST",
+    middlewares: [],
+    modules: [onRequestPost5]
+  },
+  {
+    routePath: "/api/settings",
+    mountPath: "/api",
+    method: "GET",
+    middlewares: [],
+    modules: [onRequestGet10]
+  },
+  {
+    routePath: "/api/settings",
+    mountPath: "/api",
+    method: "PATCH",
+    middlewares: [],
+    modules: [onRequestPatch5]
+  },
+  {
+    routePath: "/api/settings",
+    mountPath: "/api",
+    method: "POST",
+    middlewares: [],
+    modules: [onRequestPost6]
+  },
+  {
+    routePath: "/api/tasks",
+    mountPath: "/api/tasks",
+    method: "GET",
+    middlewares: [],
+    modules: [onRequestGet11]
+  },
+  {
+    routePath: "/api/tasks",
+    mountPath: "/api/tasks",
+    method: "POST",
+    middlewares: [],
+    modules: [onRequestPost7]
+  },
+  {
+    routePath: "/api/telegram",
+    mountPath: "/api",
+    method: "POST",
+    middlewares: [],
+    modules: [onRequestPost8]
+  }
+];
+
+// ../../../node_modules/path-to-regexp/dist.es2015/index.js
+function lexer(str) {
+  var tokens = [];
+  var i = 0;
+  while (i < str.length) {
+    var char = str[i];
+    if (char === "*" || char === "+" || char === "?") {
+      tokens.push({ type: "MODIFIER", index: i, value: str[i++] });
+      continue;
+    }
+    if (char === "\\") {
+      tokens.push({ type: "ESCAPED_CHAR", index: i++, value: str[i++] });
+      continue;
+    }
+    if (char === "{") {
+      tokens.push({ type: "OPEN", index: i, value: str[i++] });
+      continue;
+    }
+    if (char === "}") {
+      tokens.push({ type: "CLOSE", index: i, value: str[i++] });
+      continue;
+    }
+    if (char === ":") {
+      var name = "";
+      var j = i + 1;
+      while (j < str.length) {
+        var code = str.charCodeAt(j);
+        if (
+          // `0-9`
+          code >= 48 && code <= 57 || // `A-Z`
+          code >= 65 && code <= 90 || // `a-z`
+          code >= 97 && code <= 122 || // `_`
+          code === 95
+        ) {
+          name += str[j++];
+          continue;
+        }
+        break;
+      }
+      if (!name)
+        throw new TypeError("Missing parameter name at ".concat(i));
+      tokens.push({ type: "NAME", index: i, value: name });
+      i = j;
+      continue;
+    }
+    if (char === "(") {
+      var count = 1;
+      var pattern = "";
+      var j = i + 1;
+      if (str[j] === "?") {
+        throw new TypeError('Pattern cannot start with "?" at '.concat(j));
+      }
+      while (j < str.length) {
+        if (str[j] === "\\") {
+          pattern += str[j++] + str[j++];
+          continue;
+        }
+        if (str[j] === ")") {
+          count--;
+          if (count === 0) {
+            j++;
+            break;
+          }
+        } else if (str[j] === "(") {
+          count++;
+          if (str[j + 1] !== "?") {
+            throw new TypeError("Capturing groups are not allowed at ".concat(j));
+          }
+        }
+        pattern += str[j++];
+      }
+      if (count)
+        throw new TypeError("Unbalanced pattern at ".concat(i));
+      if (!pattern)
+        throw new TypeError("Missing pattern at ".concat(i));
+      tokens.push({ type: "PATTERN", index: i, value: pattern });
+      i = j;
+      continue;
+    }
+    tokens.push({ type: "CHAR", index: i, value: str[i++] });
+  }
+  tokens.push({ type: "END", index: i, value: "" });
+  return tokens;
+}
+__name(lexer, "lexer");
+function parse(str, options) {
+  if (options === void 0) {
+    options = {};
+  }
+  var tokens = lexer(str);
+  var _a = options.prefixes, prefixes = _a === void 0 ? "./" : _a, _b = options.delimiter, delimiter = _b === void 0 ? "/#?" : _b;
+  var result = [];
+  var key = 0;
+  var i = 0;
+  var path = "";
+  var tryConsume = /* @__PURE__ */ __name(function(type) {
+    if (i < tokens.length && tokens[i].type === type)
+      return tokens[i++].value;
+  }, "tryConsume");
+  var mustConsume = /* @__PURE__ */ __name(function(type) {
+    var value2 = tryConsume(type);
+    if (value2 !== void 0)
+      return value2;
+    var _a2 = tokens[i], nextType = _a2.type, index = _a2.index;
+    throw new TypeError("Unexpected ".concat(nextType, " at ").concat(index, ", expected ").concat(type));
+  }, "mustConsume");
+  var consumeText = /* @__PURE__ */ __name(function() {
+    var result2 = "";
+    var value2;
+    while (value2 = tryConsume("CHAR") || tryConsume("ESCAPED_CHAR")) {
+      result2 += value2;
+    }
+    return result2;
+  }, "consumeText");
+  var isSafe = /* @__PURE__ */ __name(function(value2) {
+    for (var _i = 0, delimiter_1 = delimiter; _i < delimiter_1.length; _i++) {
+      var char2 = delimiter_1[_i];
+      if (value2.indexOf(char2) > -1)
+        return true;
+    }
+    return false;
+  }, "isSafe");
+  var safePattern = /* @__PURE__ */ __name(function(prefix2) {
+    var prev = result[result.length - 1];
+    var prevText = prefix2 || (prev && typeof prev === "string" ? prev : "");
+    if (prev && !prevText) {
+      throw new TypeError('Must have text between two parameters, missing text after "'.concat(prev.name, '"'));
+    }
+    if (!prevText || isSafe(prevText))
+      return "[^".concat(escapeString(delimiter), "]+?");
+    return "(?:(?!".concat(escapeString(prevText), ")[^").concat(escapeString(delimiter), "])+?");
+  }, "safePattern");
+  while (i < tokens.length) {
+    var char = tryConsume("CHAR");
+    var name = tryConsume("NAME");
+    var pattern = tryConsume("PATTERN");
+    if (name || pattern) {
+      var prefix = char || "";
+      if (prefixes.indexOf(prefix) === -1) {
+        path += prefix;
+        prefix = "";
+      }
+      if (path) {
+        result.push(path);
+        path = "";
+      }
+      result.push({
+        name: name || key++,
+        prefix,
+        suffix: "",
+        pattern: pattern || safePattern(prefix),
+        modifier: tryConsume("MODIFIER") || ""
+      });
+      continue;
+    }
+    var value = char || tryConsume("ESCAPED_CHAR");
+    if (value) {
+      path += value;
+      continue;
+    }
+    if (path) {
+      result.push(path);
+      path = "";
+    }
+    var open = tryConsume("OPEN");
+    if (open) {
+      var prefix = consumeText();
+      var name_1 = tryConsume("NAME") || "";
+      var pattern_1 = tryConsume("PATTERN") || "";
+      var suffix = consumeText();
+      mustConsume("CLOSE");
+      result.push({
+        name: name_1 || (pattern_1 ? key++ : ""),
+        pattern: name_1 && !pattern_1 ? safePattern(prefix) : pattern_1,
+        prefix,
+        suffix,
+        modifier: tryConsume("MODIFIER") || ""
+      });
+      continue;
+    }
+    mustConsume("END");
+  }
+  return result;
+}
+__name(parse, "parse");
+function match(str, options) {
+  var keys = [];
+  var re = pathToRegexp(str, keys, options);
+  return regexpToFunction(re, keys, options);
+}
+__name(match, "match");
+function regexpToFunction(re, keys, options) {
+  if (options === void 0) {
+    options = {};
+  }
+  var _a = options.decode, decode = _a === void 0 ? function(x) {
+    return x;
+  } : _a;
+  return function(pathname) {
+    var m = re.exec(pathname);
+    if (!m)
+      return false;
+    var path = m[0], index = m.index;
+    var params = /* @__PURE__ */ Object.create(null);
+    var _loop_1 = /* @__PURE__ */ __name(function(i2) {
+      if (m[i2] === void 0)
+        return "continue";
+      var key = keys[i2 - 1];
+      if (key.modifier === "*" || key.modifier === "+") {
+        params[key.name] = m[i2].split(key.prefix + key.suffix).map(function(value) {
+          return decode(value, key);
+        });
+      } else {
+        params[key.name] = decode(m[i2], key);
+      }
+    }, "_loop_1");
+    for (var i = 1; i < m.length; i++) {
+      _loop_1(i);
+    }
+    return { path, index, params };
+  };
+}
+__name(regexpToFunction, "regexpToFunction");
+function escapeString(str) {
+  return str.replace(/([.+*?=^!:${}()[\]|/\\])/g, "\\$1");
+}
+__name(escapeString, "escapeString");
+function flags(options) {
+  return options && options.sensitive ? "" : "i";
+}
+__name(flags, "flags");
+function regexpToRegexp(path, keys) {
+  if (!keys)
+    return path;
+  var groupsRegex = /\((?:\?<(.*?)>)?(?!\?)/g;
+  var index = 0;
+  var execResult = groupsRegex.exec(path.source);
+  while (execResult) {
+    keys.push({
+      // Use parenthesized substring match if available, index otherwise
+      name: execResult[1] || index++,
+      prefix: "",
+      suffix: "",
+      modifier: "",
+      pattern: ""
+    });
+    execResult = groupsRegex.exec(path.source);
+  }
+  return path;
+}
+__name(regexpToRegexp, "regexpToRegexp");
+function arrayToRegexp(paths, keys, options) {
+  var parts = paths.map(function(path) {
+    return pathToRegexp(path, keys, options).source;
+  });
+  return new RegExp("(?:".concat(parts.join("|"), ")"), flags(options));
+}
+__name(arrayToRegexp, "arrayToRegexp");
+function stringToRegexp(path, keys, options) {
+  return tokensToRegexp(parse(path, options), keys, options);
+}
+__name(stringToRegexp, "stringToRegexp");
+function tokensToRegexp(tokens, keys, options) {
+  if (options === void 0) {
+    options = {};
+  }
+  var _a = options.strict, strict = _a === void 0 ? false : _a, _b = options.start, start = _b === void 0 ? true : _b, _c = options.end, end = _c === void 0 ? true : _c, _d = options.encode, encode = _d === void 0 ? function(x) {
+    return x;
+  } : _d, _e = options.delimiter, delimiter = _e === void 0 ? "/#?" : _e, _f = options.endsWith, endsWith = _f === void 0 ? "" : _f;
+  var endsWithRe = "[".concat(escapeString(endsWith), "]|$");
+  var delimiterRe = "[".concat(escapeString(delimiter), "]");
+  var route = start ? "^" : "";
+  for (var _i = 0, tokens_1 = tokens; _i < tokens_1.length; _i++) {
+    var token = tokens_1[_i];
+    if (typeof token === "string") {
+      route += escapeString(encode(token));
+    } else {
+      var prefix = escapeString(encode(token.prefix));
+      var suffix = escapeString(encode(token.suffix));
+      if (token.pattern) {
+        if (keys)
+          keys.push(token);
+        if (prefix || suffix) {
+          if (token.modifier === "+" || token.modifier === "*") {
+            var mod = token.modifier === "*" ? "?" : "";
+            route += "(?:".concat(prefix, "((?:").concat(token.pattern, ")(?:").concat(suffix).concat(prefix, "(?:").concat(token.pattern, "))*)").concat(suffix, ")").concat(mod);
+          } else {
+            route += "(?:".concat(prefix, "(").concat(token.pattern, ")").concat(suffix, ")").concat(token.modifier);
+          }
+        } else {
+          if (token.modifier === "+" || token.modifier === "*") {
+            throw new TypeError('Can not repeat "'.concat(token.name, '" without a prefix and suffix'));
+          }
+          route += "(".concat(token.pattern, ")").concat(token.modifier);
+        }
+      } else {
+        route += "(?:".concat(prefix).concat(suffix, ")").concat(token.modifier);
+      }
+    }
+  }
+  if (end) {
+    if (!strict)
+      route += "".concat(delimiterRe, "?");
+    route += !options.endsWith ? "$" : "(?=".concat(endsWithRe, ")");
+  } else {
+    var endToken = tokens[tokens.length - 1];
+    var isEndDelimited = typeof endToken === "string" ? delimiterRe.indexOf(endToken[endToken.length - 1]) > -1 : endToken === void 0;
+    if (!strict) {
+      route += "(?:".concat(delimiterRe, "(?=").concat(endsWithRe, "))?");
+    }
+    if (!isEndDelimited) {
+      route += "(?=".concat(delimiterRe, "|").concat(endsWithRe, ")");
+    }
+  }
+  return new RegExp(route, flags(options));
+}
+__name(tokensToRegexp, "tokensToRegexp");
+function pathToRegexp(path, keys, options) {
+  if (path instanceof RegExp)
+    return regexpToRegexp(path, keys);
+  if (Array.isArray(path))
+    return arrayToRegexp(path, keys, options);
+  return stringToRegexp(path, keys, options);
+}
+__name(pathToRegexp, "pathToRegexp");
+
+// ../../../node_modules/wrangler/templates/pages-template-worker.ts
+var escapeRegex = /[.+?^${}()|[\]\\]/g;
+function* executeRequest(request) {
+  const requestPath = new URL(request.url).pathname;
+  for (const route of [...routes].reverse()) {
+    if (route.method && route.method !== request.method) {
+      continue;
+    }
+    const routeMatcher = match(route.routePath.replace(escapeRegex, "\\$&"), {
+      end: false
+    });
+    const mountMatcher = match(route.mountPath.replace(escapeRegex, "\\$&"), {
+      end: false
+    });
+    const matchResult = routeMatcher(requestPath);
+    const mountMatchResult = mountMatcher(requestPath);
+    if (matchResult && mountMatchResult) {
+      for (const handler of route.middlewares.flat()) {
+        yield {
+          handler,
+          params: matchResult.params,
+          path: mountMatchResult.path
+        };
+      }
+    }
+  }
+  for (const route of routes) {
+    if (route.method && route.method !== request.method) {
+      continue;
+    }
+    const routeMatcher = match(route.routePath.replace(escapeRegex, "\\$&"), {
+      end: true
+    });
+    const mountMatcher = match(route.mountPath.replace(escapeRegex, "\\$&"), {
+      end: false
+    });
+    const matchResult = routeMatcher(requestPath);
+    const mountMatchResult = mountMatcher(requestPath);
+    if (matchResult && mountMatchResult && route.modules.length) {
+      for (const handler of route.modules.flat()) {
+        yield {
+          handler,
+          params: matchResult.params,
+          path: matchResult.path
+        };
+      }
+      break;
+    }
+  }
+}
+__name(executeRequest, "executeRequest");
+var pages_template_worker_default = {
+  async fetch(originalRequest, env, workerContext) {
+    let request = originalRequest;
+    const handlerIterator = executeRequest(request);
+    let data = {};
+    let isFailOpen = false;
+    const next = /* @__PURE__ */ __name(async (input, init) => {
+      if (input !== void 0) {
+        let url = input;
+        if (typeof input === "string") {
+          url = new URL(input, request.url).toString();
+        }
+        request = new Request(url, init);
+      }
+      const result = handlerIterator.next();
+      if (result.done === false) {
+        const { handler, params, path } = result.value;
+        const context = {
+          request: new Request(request.clone()),
+          functionPath: path,
+          next,
+          params,
+          get data() {
+            return data;
+          },
+          set data(value) {
+            if (typeof value !== "object" || value === null) {
+              throw new Error("context.data must be an object");
+            }
+            data = value;
+          },
+          env,
+          waitUntil: workerContext.waitUntil.bind(workerContext),
+          passThroughOnException: () => {
+            isFailOpen = true;
+          }
+        };
+        const response = await handler(context);
+        if (!(response instanceof Response)) {
+          throw new Error("Your Pages function should return a Response");
+        }
+        return cloneResponse(response);
+      } else if ("ASSETS") {
+        const response = await env["ASSETS"].fetch(request);
+        return cloneResponse(response);
+      } else {
+        const response = await fetch(request);
+        return cloneResponse(response);
+      }
+    }, "next");
+    try {
+      return await next();
+    } catch (error) {
+      if (isFailOpen) {
+        const response = await env["ASSETS"].fetch(request);
+        return cloneResponse(response);
+      }
+      throw error;
+    }
+  }
+};
+var cloneResponse = /* @__PURE__ */ __name((response) => (
+  // https://fetch.spec.whatwg.org/#null-body-status
+  new Response(
+    [101, 204, 205, 304].includes(response.status) ? null : response.body,
+    response
+  )
+), "cloneResponse");
+export {
+  pages_template_worker_default as default
+};
+
+------formdata-undici-094969408097--
