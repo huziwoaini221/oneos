@@ -21,6 +21,9 @@ export function evaluate(rule, item, now) {
       if (operator === 'days_gte') return days >= cond.value
       return false
     }
+    case 'birthday': {
+      return !!item.birthday
+    }
     case 'deadline_before': {
       if (!item.deadline) return false
       if (item.status === 'completed' || item.status === 'cancelled') return false

@@ -21,6 +21,14 @@ export async function loadCandidates(db, rule, now, timezone) {
       const { results } = await db.prepare('SELECT * FROM contacts WHERE last_contact IS NOT NULL').all()
       return results
     }
+    case 'birthdays': {
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+      const day = String(now.getDate()).padStart(2, '0')
+      const { results } = await db.prepare(
+        "SELECT * FROM contacts WHERE birthday IS NOT NULL AND substr(birthday, 6, 5) = ?"
+      ).bind(`${month}-${day}`).all()
+      return results
+    }
     case 'finance': {
       const p = localParts(now, timezone)
       const prefix = `${p.year}-${String(p.month).padStart(2, '0')}`

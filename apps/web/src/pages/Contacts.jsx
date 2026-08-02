@@ -13,14 +13,6 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString('zh-CN')
 }
 
-function formatDateTime(iso) {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleString('zh-CN', {
-    month: 'numeric', day: 'numeric',
-    hour: '2-digit', minute: '2-digit'
-  })
-}
-
 function daysSince(iso) {
   if (!iso) return null
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
@@ -38,25 +30,54 @@ function LevelBadge({ level }) {
 
 function ContactRow({ contact, onContact, onEdit, onDelete }) {
   const d = daysSince(contact.last_contact)
+  const isOverdue = d !== null && d > 30
+  const birthday = contact.birthday
+  const upcomingBirthday = birthday ? isBirthdaySoon(birthday) : false
+  const showContact = contact.phone || contact.wechat || contact.email
+
   return (
-    <tr className={d !== null && d > 30 ? 'overdue' : ''}>
+    <tr className={isOverdue ? 'overdue' : ''}>
       <td>
         <div className="contact-name">{contact.name}</div>
         {contact.company && <div className="contact-company">{contact.company}</div>}
+        {upcomingBirthday && <div className="contact-company birthday-hint">🎂 {birthdayText(birthday)}</div>}
       </td>
-      <td>{contact.email || contact.phone || contact.wechat || '—'}</td>
-      <td><LevelBadge level={contact.level} /></td>
-      <td className={d !== null && d > 30 ? 'overdue' : ''}>
-        {contact.last_contact ? `${d} 天前` : '从未联系'}
-      </td>
-      <td>{contact.next_followup ? formatDate(contact.next_followup) : '—'}</td>
       <td>
+        {contact.phone && <div className="contact-method">📞 {contact.phone}</div>}
+        {contact.wechat && <div className="contact-method">💬 {contact.wechat}</div>}
+        {contact.email && <div className="contact-method">✉️ {contact.email}</div>}
+        {!showContact && '—'}
+      </td>
+      <td>{birthday ? formatDate(birthday) : '—'}</td>
+      <td>{contact.address || '—'}</td>
+      <td>
+        <LevelBadge level={contact.level} />
+        {isOverdue && <span className="followup-hint">未联系 {d} 天</span>}
+      </td>
+      <td style={{ width: 230 }}>
         <button className="btn small" onClick={() => onContact(contact.id)}>记录联系</button>
         <button className="btn small secondary" onClick={() => onEdit(contact)}>编辑</button>
         <button className="btn small danger" onClick={() => onDelete(contact.id)}>删除</button>
       </td>
     </tr>
   )
+}
+
+function isBirthdaySoon(birthday) {
+  if (!birthday) return false
+  const now = new Date()
+  const b = new Date(birthday)
+  const thisYear = new Date(now.getFullYear(), b.getMonth(), b.getDate())
+  const diff = thisYear.getTime() - now.getTime()
+  return diff >= 0 && diff <= 7 * 86400000
+}
+
+function birthdayText(birthday) {
+  const b = new Date(birthday)
+  const now = new Date()
+  const thisYear = new Date(now.getFullYear(), b.getMonth(), b.getDate())
+  const days = Math.round((thisYear.getTime() - now.getTime()) / 86400000)
+  return days === 0 ? '今天生日' : `${days} 天后生日`
 }
 
 function ContactModal({ contact, onClose, onSave }) {
@@ -70,6 +91,8 @@ function ContactModal({ contact, onClose, onSave }) {
     email: contact?.email || '',
     wechat: contact?.wechat || '',
     telegram: contact?.telegram || '',
+    address: contact?.address || '',
+    birthday: contact?.birthday || '',
     level: contact?.level || 'normal',
     last_contact: contact?.last_contact || '',
     next_followup: contact?.next_followup || '',
@@ -95,6 +118,36 @@ function ContactModal({ contact, onClose, onSave }) {
           </div>
           <div className="field-row">
             <div className="field">
+              <label>电话</label>
+              <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="电话" />
+            </div>
+            <div className="field">
+              <label>微信</label>
+              <input value={form.wechat} onChange={e => setForm({ ...form, wechat: e.target.value })} placeholder="微信" />
+            </div>
+          </div>
+          <div className="field-row">
+            <div className="field">
+              <label>邮箱</label>
+              <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="邮箱" />
+            </div>
+            <div className="field">
+              <label>Telegram</label>
+              <input value={form.telegram} onChange={e => setForm({ ...form, telegram: e.target.value })} placeholder="Telegram ID" />
+            </div>
+          </div>
+          <div className="field-row">
+            <div className="field">
+              <label>生日</label>
+              <input type="date" value={form.birthday} onChange={e => setForm({ ...form, birthday: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>地址</label>
+              <input value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="地址" />
+            </div>
+          </div>
+          <div className="field-row">
+            <div className="field">
               <label>公司</label>
               <input value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} placeholder="公司" />
             </div>
@@ -113,26 +166,6 @@ function ContactModal({ contact, onClose, onSave }) {
               <select value={form.level} onChange={e => setForm({ ...form, level: e.target.value })}>
                 {LEVEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
-            </div>
-          </div>
-          <div className="field-row">
-            <div className="field">
-              <label>电话</label>
-              <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="电话" />
-            </div>
-            <div className="field">
-              <label>邮箱</label>
-              <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="邮箱" />
-            </div>
-          </div>
-          <div className="field-row">
-            <div className="field">
-              <label>微信</label>
-              <input value={form.wechat} onChange={e => setForm({ ...form, wechat: e.target.value })} placeholder="微信" />
-            </div>
-            <div className="field">
-              <label>Telegram</label>
-              <input value={form.telegram} onChange={e => setForm({ ...form, telegram: e.target.value })} placeholder="Telegram ID" />
             </div>
           </div>
           <div className="field-row">
@@ -164,6 +197,7 @@ export default function Contacts() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [filterLevel, setFilterLevel] = useState('')
+  const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
 
@@ -171,7 +205,8 @@ export default function Contacts() {
     setLoading(true)
     setError('')
     try {
-      const url = filterLevel ? `/api/contacts?level=${filterLevel}` : '/api/contacts'
+      let url = '/api/contacts'
+      if (filterLevel) url += `?level=${filterLevel}`
       const data = await get(url)
       setContacts(data || [])
     } catch (e) { setError(e.message) } finally { setLoading(false) }
@@ -204,16 +239,39 @@ export default function Contacts() {
     try { await del(`/api/contacts/${id}`); fetchContacts() } catch (e) { alert(e.message) }
   }
 
-  const filtered = contacts.filter(c => !filterLevel || c.level === filterLevel)
+  const filtered = contacts.filter(c => {
+    if (filterLevel && c.level !== filterLevel) return false
+    if (search && !(c.name + c.phone + c.wechat + c.email + c.company).toLowerCase().includes(search.toLowerCase())) return false
+    return true
+  })
+
+  const birthdaysToday = contacts.filter(c => {
+    if (!c.birthday) return false
+    const b = new Date(c.birthday)
+    const now = new Date()
+    return b.getMonth() === now.getMonth() && b.getDate() === now.getDate()
+  })
 
   return (
     <section>
       <header className="page-header">
-        <h1>联系人</h1>
+        <h1>通讯录</h1>
         <button className="btn primary" onClick={openCreate}>+ 新建联系人</button>
       </header>
 
+      {birthdaysToday.length > 0 && (
+        <div className="birthday-banner">
+          🎂 {birthdaysToday.map(c => c.name).join('、')} 今天生日！
+        </div>
+      )}
+
       <div className="filters">
+        <input
+          className="search-input"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="搜索姓名 / 电话 / 微信 / 邮箱..."
+        />
         <select value={filterLevel} onChange={e => setFilterLevel(e.target.value)}>
           <option value="">全部等级</option>
           {LEVEL_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -230,10 +288,10 @@ export default function Contacts() {
             <tr>
               <th>姓名 / 公司</th>
               <th>联系方式</th>
-              <th>等级</th>
-              <th>最后联系</th>
-              <th>下次跟进</th>
-              <th style={{ width: 220 }}>操作</th>
+              <th>生日</th>
+              <th>地址</th>
+              <th>状态</th>
+              <th style={{ width: 230 }}>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -254,15 +312,7 @@ export default function Contacts() {
         <ContactModal
           contact={editing}
           onClose={() => { setModalOpen(false); setEditing(null) }}
-          onSave={async (payload) => {
-            try {
-              if (editing) await patch(`/api/contacts/${editing.id}`, payload)
-              else await post('/api/contacts', payload)
-              setModalOpen(false)
-              setEditing(null)
-              fetchContacts()
-            } catch (e) { alert(e.message) }
-          }}
+          onSave={handleSave}
         />
       )}
     </section>

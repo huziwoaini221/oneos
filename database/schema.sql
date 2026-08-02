@@ -49,6 +49,8 @@ CREATE TABLE contacts (
   level TEXT DEFAULT 'normal',
   last_contact DATE,
   next_followup DATE,
+  address TEXT,
+  birthday TEXT,
   notes TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -103,6 +105,10 @@ VALUES('日程提醒', 'data', 'events', '{"type":"before","minutes":30}');
 -- 3. 联系人维护（data 型 contacts；30 天未联系，notify_interval = 30 天）
 INSERT INTO reminder_rules(name, type, source, condition_json)
 VALUES('联系人维护', 'data', 'contacts', '{"type":"days_since","field":"last_contact","value":30,"notify_interval":2592000}');
+
+-- 4. 生日提醒（data 型 birthdays；每天检查一次，notify_interval = 1 天）
+INSERT INTO reminder_rules(name, type, source, condition_json)
+VALUES('生日提醒', 'data', 'birthdays', '{"type":"birthday","notify_interval":86400}');
 
 -- 4. 财务检查（Sprint 8 启用）
 -- INSERT INTO reminder_rules(name, type, source, condition_json)

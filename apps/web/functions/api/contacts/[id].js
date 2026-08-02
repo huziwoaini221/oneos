@@ -2,7 +2,8 @@ import { getOne, update, remove } from '../_lib.js'
 
 const ALLOWED = [
   'name', 'company', 'country', 'industry', 'phone', 'email',
-  'wechat', 'telegram', 'level', 'last_contact', 'next_followup', 'notes'
+  'wechat', 'telegram', 'level', 'last_contact', 'next_followup',
+  'address', 'birthday', 'notes'
 ]
 
 export async function onRequestGet({ env, params }) {

@@ -17,6 +17,8 @@ export async function runReminderEngine(env) {
     try {
       if (rule.type === 'time') {
         await processTimeRule(db, env, settings, rule)
+      } else if (rule.type === 'data' && rule.source === 'birthdays') {
+        await processBirthdayRule(db, env, settings, rule)
       } else if (rule.type === 'data') {
         await processDataRule(db, env, settings, rule)
       }
@@ -55,6 +57,24 @@ async function processTimeRule(db, env, settings, rule) {
   const next = nextFireAt(now, settings.timezone, rule.schedule)
   if (!next) throw new Error(`unsupported schedule: ${rule.schedule}`)
   await db.prepare('UPDATE reminder_rules SET next_fire_at = ? WHERE id = ?').bind(next.toISOString(), rule.id).run()
+}
+
+async function processBirthdayRule(db, env, settings, rule) {
+  const now = new Date()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  const { results: birthdays } = await db.prepare(
+    "SELECT * FROM contacts WHERE birthday IS NOT NULL AND substr(birthday, 6, 5) = ?"
+  ).bind(`${month}-${day}`).all()
+
+  const intervalSec = 86400
+  for (const person of birthdays) {
+    const objectId = String(person.id)
+    if (!(await canNotify(db, rule, 'birthdays', objectId, intervalSec))) continue
+    const text = `【${rule.name}】\n🎂 今天是 ${person.name} 的生日！${person.phone ? `\n📞 ${person.phone}` : ''}${person.address ? `\n📍 ${person.address}` : ''}`
+    await sendTelegram(env, settings, text)
+    await logReminder(db, rule, 'birthdays', objectId, 'sent', now.toISOString())
+  }
 }
 
 async function processDataRule(db, env, settings, rule) {
