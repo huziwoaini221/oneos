@@ -11,7 +11,7 @@ export async function onRequestGet({ env, params }) {
 }
 
 export async function onRequestPatch({ env, request, params }) {
-  return update(env.DB, 'contacts', params.id, ALLOWED, request)
+  return update(env.DB, 'contacts', ALLOWED, request, params.id)
 }
 
 export async function onRequestDelete({ env, params }) {
