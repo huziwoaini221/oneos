@@ -3,7 +3,7 @@
 
 export async function onRequestPost({ request, env }) {
   const secretHeader = request.headers.get('X-Telegram-Bot-Api-Secret-Token')
-  if (secretHeader && env.TELEGRAM_BOT_TOKEN && secretHeader !== env.TELEGRAM_BOT_TOKEN) {
+  if (secretHeader && env.TELEGRAM_WEBHOOK_SECRET && secretHeader !== env.TELEGRAM_WEBHOOK_SECRET) {
     return new Response('unauthorized', { status: 401 })
   }
 
