@@ -1,4 +1,4 @@
-import { json, list, create } from '../_lib.js'
+import { json, list, create } from '../../_lib.js'
 
 const ALLOWED = ['amount', 'category', 'date', 'note']
 
