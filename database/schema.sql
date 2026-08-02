@@ -7,7 +7,8 @@ CREATE TABLE settings (
   timezone TEXT DEFAULT 'Asia/Shanghai',
   telegram_chat_id TEXT,
   telegram_enabled INTEGER DEFAULT 1,
-  default_channel TEXT DEFAULT 'telegram'
+  default_channel TEXT DEFAULT 'telegram',
+  weather_city TEXT
 );
 
 INSERT INTO settings(id) VALUES(1);

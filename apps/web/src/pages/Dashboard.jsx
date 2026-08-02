@@ -112,20 +112,31 @@ function ExpenseItem({ exp }) {
 function WeatherWidget() {
   const [weather, setWeather] = useState(null)
   useEffect(() => {
-    // 使用免费天气 API，这里用模拟数据；生产可接入 wttr.in / OpenWeatherMap 等
-    const mock = { temp: 28, condition: '晴', humidity: 65, wind: '东南风 3级' }
-    setWeather(mock)
+    let cancelled = false
+    get('/api/settings').then(async (s) => {
+      const city = s?.weather_city
+      if (!city) {
+        if (!cancelled) setWeather({ city: null, temp: null, condition: '未设置天气城市', humidity: null, wind: null })
+        return
+      }
+      const w = await get(`/api/weather?city=${encodeURIComponent(city)}`).catch(() => null)
+      if (!cancelled) setWeather(w || { city, temp: null, condition: '天气获取失败', humidity: null, wind: null })
+    }).catch(() => {
+      if (!cancelled) setWeather({ city: null, temp: null, condition: '天气获取失败', humidity: null, wind: null })
+    })
+    return () => { cancelled = true }
   }, [])
   if (!weather) return <div className="stat-card loading">加载天气...</div>
   return (
     <div className="stat-card weather">
       <div className="weather-main">
-        <span className="weather-temp">{weather.temp}°C</span>
+        {weather.temp != null ? <span className="weather-temp">{weather.temp}°C</span> : null}
         <span className="weather-condition">{weather.condition}</span>
       </div>
       <div className="weather-details">
-        <span>湿度 {weather.humidity}%</span>
-        <span>{weather.wind}</span>
+        {weather.humidity != null ? <span>湿度 {weather.humidity}%</span> : null}
+        {weather.wind ? <span>{weather.wind}</span> : null}
+        {weather.city ? <span>{weather.city}</span> : null}
       </div>
     </div>
   )

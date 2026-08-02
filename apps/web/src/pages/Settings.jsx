@@ -7,6 +7,7 @@ export default function Settings() {
     telegram_chat_id: '',
     telegram_enabled: 1,
     default_channel: 'telegram',
+    weather_city: '',
     lifehub_token: ''
   })
   const [loading, setLoading] = useState(true)
@@ -46,7 +47,8 @@ export default function Settings() {
       timezone: settings.timezone,
       telegram_chat_id: settings.telegram_chat_id || null,
       telegram_enabled: settings.telegram_enabled ? 1 : 0,
-      default_channel: settings.default_channel
+      default_channel: settings.default_channel,
+      weather_city: settings.weather_city || null
     }
     try {
       await patch('/api/settings', payload)
@@ -100,6 +102,15 @@ export default function Settings() {
               <option value="telegram">Telegram</option>
               <option value="email">Email (待实现)</option>
             </select>
+          </div>
+          <div className="field">
+            <label>天气城市</label>
+            <input
+              value={settings.weather_city || ''}
+              onChange={e => setSettings({ ...settings, weather_city: e.target.value })}
+              placeholder="如：Shanghai / Beijing / Chengdu"
+            />
+            <p className="hint">Dashboard 天气卡片将显示该城市的实时天气（OpenWeatherMap）。</p>
           </div>
         </div>
 
