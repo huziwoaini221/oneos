@@ -1,0 +1,25 @@
+{
+  "name": "lifehub",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LifeHub - 个人行动操作系统（Personal Life Operating System）",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace @lifehub/web",
+    "dev:pages": "npm run dev:pages --workspace @lifehub/web",
+    "dev:worker": "npm run dev --workspace @lifehub/reminder-worker",
+    "build": "npm run build --workspace @lifehub/web",
+    "deploy:web": "npm run deploy --workspace @lifehub/web",
+    "deploy:worker": "npm run deploy --workspace @lifehub/reminder-worker",
+    "db:create": "wrangler d1 create lifehub-db",
+    "db:migrate:local": "wrangler d1 execute lifehub-db --file=./database/schema.sql --local",
+    "db:migrate": "wrangler d1 execute lifehub-db --file=./database/schema.sql --remote"
+  },
+  "devDependencies": {
+    "wrangler": "^3.99.0"
+  }
+}

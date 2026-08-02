@@ -1,0 +1,417 @@
+{
+  "project": {
+    "name": "LifeHub",
+    "version": "V6",
+    "status": "frozen",
+    "type": "single-user-personal-os",
+    "positioning": "个人行动操作系统（Personal Life Operating System）",
+    "oneLiner": "通过任务、日历、联系人和财务数据，主动提醒用户下一步行动。",
+    "notScope": [
+      "文件管理",
+      "知识库",
+      "AI 助手",
+      "RSS 信息中心",
+      "Weather 独立模块",
+      "多用户/多租户"
+    ],
+    "coreMetric": "连续使用7天，不主动打开App，也能收到80%以上应该收到的提醒",
+    "costTarget": "0-5 USD/月",
+    "maintenance": "无服务器维护"
+  },
+
+  "architecture": {
+    "summary": "Cloudflare Pages + Worker + D1 的 Serverless Personal OS 架构",
+    "flow": [
+      "User → Cloudflare Pages（React PWA 前端）",
+      "Pages Functions API /api/*（鉴权 + CRUD）",
+      "Pages Functions /telegram（Telegram 入站 webhook：/start、callback_query）",
+      "↑↓ D1 数据库（唯一数据存储）",
+      "Cloudflare Worker（scheduled handler，*/15 * * * *）→ Reminder Engine",
+      "Reminder Engine → Telegram Bot（主动推送）"
+    ],
+    "deploymentResponsibilities": {
+      "cloudflarePages": {
+        "role": "前端 + API + Telegram 入站",
+        "frontend": ["React", "PWA", "Dashboard", "Tasks", "Calendar", "Contacts", "Finance", "Settings"],
+        "apiDir": "apps/web/functions/api/",
+        "apiFiles": ["tasks.js", "events.js", "contacts.js", "finance.js", "reminders.js", "settings.js"],
+        "telegramInbound": "apps/web/functions/telegram.js"
+      },
+      "cloudflareWorker": {
+        "role": "仅负责 scheduled() 定时扫描提醒规则",
+        "notResponsible": ["API", "用户请求", "Telegram webhook"],
+        "schedule": "*/15 * * * *"
+      }
+    }
+  },
+
+  "techStack": {
+    "frontend": "React + PWA (Vite)",
+    "backend": "Cloudflare Pages Functions",
+    "database": "Cloudflare D1 (SQLite)",
+    "scheduling": "Cloudflare Cron Trigger",
+    "cronExpression": "*/15 * * * *",
+    "notification": "Telegram Bot",
+    "auth": "Authorization: Bearer <TOKEN> 简单保护",
+    "monorepo": "npm workspaces（不使用 Turborepo）"
+  },
+
+  "modules": [
+    { "name": "Dashboard", "route": "/", "purpose": "今日总览：天气组件、今日任务、今日事件、提醒、待联系人员、今日消费" },
+    { "name": "Tasks", "route": "/tasks", "purpose": "待办任务 CRUD，状态机 pending/doing/completed/cancelled" },
+    { "name": "Calendar", "route": "/calendar", "purpose": "日程管理 CRUD" },
+    { "name": "Contacts", "route": "/contacts", "purpose": "私人CRM，重点字段 last_contact / next_followup / level" },
+    { "name": "Finance", "route": "/finance", "purpose": "记账（金额/分类/日期），不做复杂预算" },
+    { "name": "Reminder Engine", "route": "/reminders", "purpose": "规则查看/创建、历史提醒日志" },
+    { "name": "Settings", "route": "/settings", "purpose": "时区、Telegram 绑定、默认提醒渠道" }
+  ],
+
+  "pages": [
+    { "route": "/", "name": "Dashboard" },
+    { "route": "/tasks", "name": "Tasks" },
+    { "route": "/calendar", "name": "Calendar" },
+    { "route": "/contacts", "name": "Contacts" },
+    { "route": "/finance", "name": "Finance" },
+    { "route": "/reminders", "name": "Reminder" },
+    { "route": "/settings", "name": "Settings" }
+  ],
+
+  "directoryStructure": {
+    "root": "lifehub/",
+    "tree": {
+      "package.json": "workspaces: [apps/*, packages/*], private: true",
+      "package-lock.json": "",
+      "apps": {
+        "web": {
+          "src/": "React 源码",
+          "components/": "组件",
+          "pages/": "页面",
+          "functions/": {
+            "_middleware.js": "Bearer Token 鉴权",
+            "telegram.js": "Telegram webhook 入站（/start + callback_query）",
+            "api/": {
+              "tasks.js": "",
+              "events.js": "",
+              "contacts.js": "",
+              "finance.js": "",
+              "reminders.js": "",
+              "settings.js": ""
+            }
+          },
+          "package.json": "",
+          "vite.config.js": "",
+          "wrangler.toml": "Pages + D1 绑定配置"
+        },
+        "reminder-worker": {
+          "src/": "",
+          "index.js": "scheduled() handler",
+          "package.json": "",
+          "wrangler.toml": "Worker + D1 绑定 + cron trigger"
+        }
+      },
+      "packages": {
+        "reminder-engine": {
+          "package.json": "零依赖纯 JS",
+          "runner.js": "引擎入口，串联流程",
+          "loader.js": "按 source 加载候选数据",
+          "evaluator.js": "条件求值",
+          "deduplicator.js": "去重（notify_interval 窗口）",
+          "sender.js": "Telegram 发送",
+          "scheduler.js": "微型 cron 解析器（next_fire_at 计算）"
+        }
+      },
+      "database": {
+        "schema.sql": "7 张表 + 索引 + 种子数据"
+      },
+      "README.md": ""
+    }
+  },
+
+  "secrets": {
+    "cloudflarePages": {
+      "LIFEHUB_TOKEN": "API 简单保护（Bearer token）",
+      "TELEGRAM_BOT_TOKEN": "验证 Telegram webhook"
+    },
+    "cloudflareWorker": {
+      "TELEGRAM_BOT_TOKEN": "唯一必需"
+    },
+    "notes": [
+      "Worker 直接连 D1，不调用 Pages API，因此不需要 LIFEHUB_TOKEN",
+      "LIFEHUB_TOKEN 存于前端 SPA 中可见，仅挡普通访问，非真实安全边界"
+    ]
+  },
+
+  "database": {
+    "summary": "7 张表，无 users 表，settings 单例",
+    "tables": [
+      {
+        "name": "settings",
+        "desc": "系统配置，单例行 id=1",
+        "columns": [
+          { "name": "id", "type": "INTEGER PRIMARY KEY CHECK(id=1)", "note": "强制单例" },
+          { "name": "timezone", "type": "TEXT DEFAULT 'Asia/Shanghai'" },
+          { "name": "telegram_chat_id", "type": "TEXT" },
+          { "name": "telegram_enabled", "type": "INTEGER DEFAULT 1" },
+          { "name": "default_channel", "type": "TEXT DEFAULT 'telegram'" }
+        ]
+      },
+      {
+        "name": "tasks",
+        "desc": "待办任务",
+        "columns": [
+          { "name": "id", "type": "INTEGER PRIMARY KEY AUTOINCREMENT" },
+          { "name": "title", "type": "TEXT NOT NULL" },
+          { "name": "description", "type": "TEXT" },
+          { "name": "priority", "type": "TEXT DEFAULT 'normal'", "note": "enum: low/normal/high" },
+          { "name": "status", "type": "TEXT DEFAULT 'pending'", "note": "enum: pending/doing/completed/cancelled" },
+          { "name": "deadline", "type": "DATETIME", "note": "ISO 8601 UTC" },
+          { "name": "completed_at", "type": "DATETIME" },
+          { "name": "created_at", "type": "DATETIME DEFAULT CURRENT_TIMESTAMP" },
+          { "name": "updated_at", "type": "DATETIME DEFAULT CURRENT_TIMESTAMP" }
+        ]
+      },
+      {
+        "name": "events",
+        "desc": "日程",
+        "columns": [
+          { "name": "id", "type": "INTEGER PRIMARY KEY AUTOINCREMENT" },
+          { "name": "title", "type": "TEXT NOT NULL" },
+          { "name": "start_time", "type": "DATETIME" },
+          { "name": "end_time", "type": "DATETIME" },
+          { "name": "location", "type": "TEXT" },
+          { "name": "notes", "type": "TEXT" },
+          { "name": "created_at", "type": "DATETIME DEFAULT CURRENT_TIMESTAMP" },
+          { "name": "updated_at", "type": "DATETIME DEFAULT CURRENT_TIMESTAMP" }
+        ]
+      },
+      {
+        "name": "contacts",
+        "desc": "私人 CRM",
+        "columns": [
+          { "name": "id", "type": "INTEGER PRIMARY KEY AUTOINCREMENT" },
+          { "name": "name", "type": "TEXT NOT NULL" },
+          { "name": "company", "type": "TEXT" },
+          { "name": "country", "type": "TEXT" },
+          { "name": "industry", "type": "TEXT" },
+          { "name": "phone", "type": "TEXT" },
+          { "name": "email", "type": "TEXT" },
+          { "name": "wechat", "type": "TEXT" },
+          { "name": "telegram", "type": "TEXT" },
+          { "name": "level", "type": "TEXT DEFAULT 'normal'", "note": "重点字段" },
+          { "name": "last_contact", "type": "DATE", "note": "重点字段，数据触发提醒依赖" },
+          { "name": "next_followup", "type": "DATE", "note": "重点字段" },
+          { "name": "notes", "type": "TEXT" },
+          { "name": "created_at", "type": "DATETIME DEFAULT CURRENT_TIMESTAMP" },
+          { "name": "updated_at", "type": "DATETIME DEFAULT CURRENT_TIMESTAMP" }
+        ]
+      },
+      {
+        "name": "expenses",
+        "desc": "记账，不做复杂预算",
+        "columns": [
+          { "name": "id", "type": "INTEGER PRIMARY KEY AUTOINCREMENT" },
+          { "name": "amount", "type": "REAL" },
+          { "name": "category", "type": "TEXT" },
+          { "name": "date", "type": "DATE" },
+          { "name": "note", "type": "TEXT" },
+          { "name": "created_at", "type": "DATETIME DEFAULT CURRENT_TIMESTAMP" },
+          { "name": "updated_at", "type": "DATETIME DEFAULT CURRENT_TIMESTAMP" }
+        ]
+      },
+      {
+        "name": "reminder_rules",
+        "desc": "提醒规则核心表",
+        "columns": [
+          { "name": "id", "type": "INTEGER PRIMARY KEY AUTOINCREMENT" },
+          { "name": "name", "type": "TEXT NOT NULL" },
+          { "name": "type", "type": "TEXT NOT NULL", "note": "enum: time / data" },
+          { "name": "source", "type": "TEXT", "note": "data 型：tasks/events/contacts/finance" },
+          { "name": "condition_json", "type": "TEXT", "note": "data 型条件" },
+          { "name": "schedule", "type": "TEXT", "note": "time 型 cron 表达式，仅支持子集" },
+          { "name": "next_fire_at", "type": "DATETIME", "note": "time 型下次触发点（UTC）" },
+          { "name": "channel", "type": "TEXT DEFAULT 'telegram'" },
+          { "name": "enabled", "type": "INTEGER DEFAULT 1" },
+          { "name": "created_at", "type": "DATETIME DEFAULT CURRENT_TIMESTAMP" }
+        ]
+      },
+      {
+        "name": "reminder_logs",
+        "desc": "提醒日志，防重复",
+        "columns": [
+          { "name": "id", "type": "INTEGER PRIMARY KEY AUTOINCREMENT" },
+          { "name": "rule_id", "type": "INTEGER" },
+          { "name": "object_type", "type": "TEXT" },
+          { "name": "object_id", "type": "INTEGER" },
+          { "name": "status", "type": "TEXT", "note": "enum: sent / failed / skipped" },
+          { "name": "trigger_time", "type": "DATETIME" },
+          { "name": "sent_time", "type": "DATETIME" },
+          { "name": "created_at", "type": "DATETIME DEFAULT CURRENT_TIMESTAMP" }
+        ],
+        "indexes": [
+          "CREATE INDEX idx_reminder_lookup ON reminder_logs(rule_id, object_type, object_id, sent_time);"
+        ]
+      }
+    ],
+    "seedData": [
+      "INSERT INTO settings(id) VALUES(1);",
+      {
+        "desc": "内置模板1 - 每日晨报（time 型）",
+        "sql": "INSERT INTO reminder_rules(name, type, schedule, next_fire_at) VALUES('每日晨报', 'time', '0 8 * * *', NULL);"
+      },
+      {
+        "desc": "内置模板2 - 日程提前30分钟（data 型 events）",
+        "sql": "INSERT INTO reminder_rules(name, type, source, condition_json) VALUES('日程提醒', 'data', 'events', '{\"type\":\"before\",\"minutes\":30}');"
+      },
+      {
+        "desc": "内置模板3 - 联系人维护（data 型 contacts）",
+        "sql": "INSERT INTO reminder_rules(name, type, source, condition_json) VALUES('联系人维护', 'data', 'contacts', '{\"type\":\"days_since\",\"field\":\"last_contact\",\"value\":30,\"notify_interval\":2592000}');"
+      },
+      {
+        "desc": "内置模板4 - 财务检查（Sprint8 启用，先注释）",
+        "sql": "-- INSERT INTO reminder_rules(name, type, source, condition_json) VALUES('财务检查', 'data', 'finance', '{\"type\":\"over_budget\",\"category\":\"food\",\"amount\":2000,\"period\":\"monthly\",\"notify_interval\":2592000}');"
+      }
+    ],
+    "constraints": [
+      "不增加 budgets 表，预算阈值存在 condition_json 中",
+      "所有时间以 UTC 存储，展示时按 settings.timezone 转换",
+      "禁止代码中硬编码时区",
+      "reminder_logs.status: sent / failed / skipped"
+    ]
+  },
+
+  "reminderEngine": {
+    "location": "packages/reminder-engine",
+    "constraint": "零依赖纯 JS，两端（Pages Functions 与 Worker）共用同一份代码",
+    "files": {
+      "runner.js": "读取 settings → 加载启用规则 → 逐条执行 → 写 logs",
+      "loader.js": "按 rule.source 从 D1 加载候选数据（tasks/events/contacts/expenses 聚合）",
+      "evaluator.js": "条件求值，返回是否匹配",
+      "deduplicator.js": "按 (rule_id, object_type, object_id) 查最近 sent_time，now - sent_time < notify_interval 则跳过",
+      "sender.js": "Telegram sendMessage 推送",
+      "scheduler.js": "微型 cron 解析器，按 timezone 计算 next_fire_at"
+    },
+    "runnerFlow": [
+      "load settings",
+      "load enabled rules",
+      "for each rule:",
+      "  type=time → checkNextFire(rule): now >= next_fire_at → send → 计算下次 → 更新 next_fire_at",
+      "  type=data → loader(rule) → evaluator(rule, item) → deduplicator(rule, item) → sender.send() → log()"
+    ],
+    "nextFireModel": {
+      "desc": "time 型规则不用 cron 匹配当前时刻，改用 next_fire_at 模型",
+      "init": "next_fire_at 为 NULL 时首轮只计算并写入，不发送",
+      "fire": "now >= next_fire_at 时发送，然后计算下一次触发点并更新",
+      "advantages": ["不关心 Cron 时区", "支持 DST", "支持任意时间"]
+    },
+    "schedulerCronSubset": {
+      "desc": "scheduler.js 只支持 V1 需要的子集",
+      "supported": ["每天 HH:MM", "每周某天 HH:MM", "每月某号 HH:MM"],
+      "unsupported": "跳过该规则并写一条 failed log，不崩溃"
+    },
+    "notifyInterval": {
+      "unit": "秒",
+      "dataRules": "条件内显式指定（如 30天 = 2592000）",
+      "timeRules": "由 schedule 推导（每天=86400，每周=604800，每月≈2592000）",
+      "logic": "evaluate → matched → 检查最近一次通知 → 窗口内则跳过 → 否则发送"
+    },
+    "evaluatorConditions": {
+      "before": "0 <= start_time - now <= minutes（事件类）",
+      "days_since": "field(last_contact) 距今天数 > value（联系人）",
+      "deadline_before": "任务 deadline 距今 <= hours 且未完成",
+      "over_budget": "当月某分类 sum(expenses.amount) > amount（财务，预算在 condition_json）"
+    }
+  },
+
+  "telegram": {
+    "mode": "webhook（Pages 自带 HTTPS）",
+    "webhookFile": "apps/web/functions/telegram.js",
+    "setup": "部署后调用 setWebhook 指向该端点",
+    "handlers": {
+      "start": {
+        "trigger": "用户发 /start",
+        "payload": "message.chat.id",
+        "action": "chat_id → settings.telegram_chat_id → 回复“绑定成功”"
+      },
+      "callbackQuery": {
+        "trigger": "内联按钮（如 [完成任务]）",
+        "payload": "callback_query.data = task_complete:<task_id>",
+        "action": "解析 task_id → UPDATE tasks SET status=completed, completed_at=now → 写 reminder_logs → 回复完成"
+      }
+    }
+  },
+
+  "api": {
+    "auth": "functions/_middleware.js 校验 Authorization: Bearer <LIFEHUB_TOKEN>",
+    "endpoints": [
+      { "file": "api/tasks.js", "resource": "tasks", "methods": ["GET", "POST", "PATCH", "DELETE"] },
+      { "file": "api/events.js", "resource": "events", "methods": ["GET", "POST", "PATCH", "DELETE"] },
+      { "file": "api/contacts.js", "resource": "contacts", "methods": ["GET", "POST", "PATCH", "DELETE"] },
+      { "file": "api/finance.js", "resource": "expenses", "methods": ["GET", "POST", "DELETE"] },
+      { "file": "api/reminders.js", "resource": "reminder_rules / reminder_logs", "methods": ["GET", "POST", "PATCH"] },
+      { "file": "api/settings.js", "resource": "settings", "methods": ["GET", "PATCH"] },
+      { "file": "telegram.js", "resource": "telegram webhook", "methods": ["POST"] }
+    ]
+  },
+
+  "workerConfig": {
+    "wranglerToml": {
+      "name": "lifehub-reminder-worker",
+      "main": "src/index.js",
+      "triggers": { "crons": ["*/15 * * * *"] },
+      "d1Databases": [{ "binding": "DB", "database_name": "lifehub-db" }]
+    },
+    "responsibility": "仅 scheduled()，定时执行 Reminder Engine"
+  },
+
+  "developmentPlan": {
+    "phase1Scope": [
+      "基础工程：package.json workspace / Vite / Worker / wrangler",
+      "安全：functions/_middleware.js",
+      "API 骨架：tasks API、settings API",
+      "Engine 骨架：runner / loader / evaluator / deduplicator / sender",
+      "Telegram：webhook 入口"
+    ],
+    "schedule": [
+      { "day": "Day 1", "task": "基础工程：npm workspace、React、Pages、Worker、D1 创建" },
+      { "day": "Day 2", "task": "数据库：schema.sql、migration" },
+      { "day": "Day 3", "task": "API 基础：middleware 鉴权、CRUD 框架" },
+      { "day": "Day 4-5", "task": "Tasks：创建、编辑、完成" },
+      { "day": "Day 6-7", "task": "Dashboard：Tasks / Events / Reminder" },
+      { "day": "Day 8-10", "task": "Calendar" },
+      { "day": "Day 11-13", "task": "Contacts" },
+      { "day": "Day 14-18", "task": "Reminder Engine：rule 读取、evaluator、dedup、logs" },
+      { "day": "Day 19-20", "task": "Telegram：/start、推送、点击完成" },
+      { "day": "Day 21", "task": "PWA" },
+      { "day": "Day 22-25", "task": "Finance" }
+    ]
+  },
+
+  "acceptanceCriteria": {
+    "functional": [
+      "用户连续 7 天，每天：创建任务、添加日程、更新联系人、添加消费",
+      "系统自动：提醒任务、提醒日程、提醒联系人、推送 Telegram"
+    ],
+    "coreMetric": "连续 7 天，不主动打开系统，也能收到 80% 以上应该收到的提醒",
+    "note": "验收指标到 Sprint（Day 19-20 Telegram）之后才可测量"
+  },
+
+  "platformConstraints": [
+    "Pages Functions 不支持 Cron，Cron 必须用独立 Worker",
+    "Cron 永远运行在 UTC，本地时间计算统一走 settings.timezone",
+    "免费计划 Cron 每次 10ms CPU：引擎保持轻量（多为 I/O），超限则上 $5 付费计划",
+    "reminder-engine 必须零依赖，保证两端 bundle"
+  ],
+
+  "v1Deliverables": [
+    "Dashboard",
+    "Tasks",
+    "Calendar",
+    "Contacts",
+    "Finance",
+    "Reminder Engine",
+    "Telegram Bot",
+    "PWA",
+    "D1 Storage",
+    "API Security"
+  ]
+}

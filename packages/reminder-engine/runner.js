@@ -1,0 +1,89 @@
+// 引擎入口。串联：settings -> 启用规则 -> (time: next_fire_at / data: loader+evaluator+dedup) -> sender -> logs。
+// 零依赖，Pages Functions 与 Worker 均可调用：runReminderEngine(env)。
+
+import { loadCandidates } from './loader.js'
+import { evaluate } from './evaluator.js'
+import { canNotify } from './deduplicator.js'
+import { sendTelegram, buildMessage, buildDailyDigest } from './sender.js'
+import { nextFireAt, deriveNotifyInterval } from './scheduler.js'
+
+export async function runReminderEngine(env) {
+  const db = env.DB
+  const settings = await getSettings(db)
+
+  const { results: rules } = await db.prepare('SELECT * FROM reminder_rules WHERE enabled = 1').all()
+
+  for (const rule of rules) {
+    try {
+      if (rule.type === 'time') {
+        await processTimeRule(db, env, settings, rule)
+      } else if (rule.type === 'data') {
+        await processDataRule(db, env, settings, rule)
+      }
+    } catch (err) {
+      await logReminder(db, rule, 'rule', rule.id, 'failed', null)
+      console.error(`[reminder] rule ${rule.id} failed:`, err.message)
+    }
+  }
+}
+
+async function getSettings(db) {
+  const row = await db.prepare('SELECT * FROM settings WHERE id = 1').first()
+  return row || { timezone: 'Asia/Shanghai', telegram_chat_id: null, telegram_enabled: 1, default_channel: 'telegram' }
+}
+
+async function processTimeRule(db, env, settings, rule) {
+  const now = new Date()
+
+  if (!rule.next_fire_at) {
+    const next = nextFireAt(now, settings.timezone, rule.schedule)
+    if (!next) throw new Error(`unsupported schedule: ${rule.schedule}`)
+    await db.prepare('UPDATE reminder_rules SET next_fire_at = ? WHERE id = ?').bind(next.toISOString(), rule.id).run()
+    return
+  }
+
+  if (now.getTime() < new Date(rule.next_fire_at).getTime()) return
+
+  const intervalSec = deriveNotifyInterval(rule.schedule)
+  const objectId = String(rule.id)
+  if (await canNotify(db, rule, 'rule', objectId, intervalSec)) {
+    const text = await buildDailyDigest(db, settings, now)
+    await sendTelegram(env, settings, text)
+    await logReminder(db, rule, 'rule', objectId, 'sent', now.toISOString())
+  }
+
+  const next = nextFireAt(now, settings.timezone, rule.schedule)
+  if (!next) throw new Error(`unsupported schedule: ${rule.schedule}`)
+  await db.prepare('UPDATE reminder_rules SET next_fire_at = ? WHERE id = ?').bind(next.toISOString(), rule.id).run()
+}
+
+async function processDataRule(db, env, settings, rule) {
+  const now = new Date()
+  const cond = parseCondition(rule)
+  const intervalSec = cond.notify_interval || 86400
+  const items = await loadCandidates(db, rule, now, settings.timezone)
+
+  for (const item of items) {
+    if (!evaluate(rule, item, now)) continue
+    const objectType = rule.source
+    const objectId = String(item.id)
+    if (!(await canNotify(db, rule, objectType, objectId, intervalSec))) continue
+    const text = buildMessage(rule, item, settings)
+    await sendTelegram(env, settings, text)
+    await logReminder(db, rule, objectType, objectId, 'sent', now.toISOString())
+  }
+}
+
+function parseCondition(rule) {
+  try {
+    return JSON.parse(rule.condition_json || '{}')
+  } catch {
+    return {}
+  }
+}
+
+export async function logReminder(db, rule, objectType, objectId, status, sentTime) {
+  await db.prepare(
+    'INSERT INTO reminder_logs (rule_id, object_type, object_id, status, trigger_time, sent_time) VALUES (?, ?, ?, ?, ?, ?)'
+  ).bind(rule.id, objectType, objectId, status, new Date().toISOString(), sentTime ?? new Date().toISOString()).run()
+}

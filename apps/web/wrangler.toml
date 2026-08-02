@@ -1,0 +1,9 @@
+# 本地 dev：wrangler pages dev 会读取本文件绑定。
+# 生产：需在 Pages Dashboard（Settings > Functions > D1 database）配置同名绑定，
+# Secrets 用 wrangler pages secret put 或 Dashboard 配置。
+name = "lifehub-web"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "lifehub-db"
+database_id = "e59138af-f4ea-44b7-9c97-1a9749dfa4a8"

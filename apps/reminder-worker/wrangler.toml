@@ -1,0 +1,11 @@
+name = "lifehub-reminder-worker"
+main = "src/index.js"
+compatibility_date = "2026-08-02"
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "lifehub-db"
+database_id = "e59138af-f4ea-44b7-9c97-1a9749dfa4a8"

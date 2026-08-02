@@ -1,0 +1,18 @@
+import { getOne, update, remove } from '../../_lib.js'
+
+const ALLOWED = [
+  'name', 'company', 'country', 'industry', 'phone', 'email',
+  'wechat', 'telegram', 'level', 'last_contact', 'next_followup', 'notes'
+]
+
+export async function onRequestGet({ env, params }) {
+  return getOne(env.DB, 'contacts', params.id)
+}
+
+export async function onRequestPatch({ env, request, params }) {
+  return update(env.DB, 'contacts', params.id, ALLOWED, request)
+}
+
+export async function onRequestDelete({ env, params }) {
+  return remove(env.DB, 'contacts', params.id)
+}

@@ -1,0 +1,12 @@
+{
+  "name": "@lifehub/reminder-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LifeHub 提醒引擎，零依赖纯 JS，Pages Functions 与 Worker 共用",
+  "main": "./runner.js",
+  "exports": {
+    ".": "./runner.js",
+    "./scheduler": "./scheduler.js"
+  }
+}
