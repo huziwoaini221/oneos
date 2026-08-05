@@ -8,7 +8,7 @@ export async function onRequest(context) {
   if (!url.pathname.startsWith('/api/')) return next()
 
   const path = url.pathname
-  if (path.startsWith('/api/telegram') || path.startsWith('/api/cron')) return next()
+  if (path.startsWith('/api/telegram') || path.startsWith('/api/cron') || path.startsWith('/api/wecom')) return next()
 
   const auth = request.headers.get('Authorization')
   if (auth !== `Bearer ${env.LIFEHUB_TOKEN}`) {

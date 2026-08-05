@@ -1,0 +1,14 @@
+name = "lifehub-wecom-bot"
+main = "src/index.js"
+compatibility_date = "2026-08-02"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[durable_objects.bindings]]
+name = "WECOM_BOT"
+class_name = "WecomBot"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["WecomBot"]
