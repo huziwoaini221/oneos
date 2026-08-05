@@ -4,7 +4,7 @@
 import { loadCandidates } from './loader.js'
 import { evaluate } from './evaluator.js'
 import { canNotify } from './deduplicator.js'
-import { sendTelegram, buildMessage, buildDailyDigest } from './sender.js'
+import { send, buildMessage, buildDailyDigest } from './sender.js'
 import { nextFireAt, deriveNotifyInterval, localParts } from './scheduler.js'
 
 export async function runReminderEngine(env) {
@@ -50,7 +50,7 @@ async function processTimeRule(db, env, settings, rule) {
   const objectId = String(rule.id)
   if (await canNotify(db, rule, 'rule', objectId, intervalSec)) {
     const text = await buildDailyDigest(db, settings, now)
-    await sendTelegram(env, settings, text)
+    await send(env, settings, text)
     await logReminder(db, rule, 'rule', objectId, 'sent', now.toISOString())
 
     const next = nextFireAt(now, settings.timezone, rule.schedule)
@@ -76,7 +76,7 @@ async function processBirthdayRule(db, env, settings, rule) {
     const objectId = String(person.id)
     if (!(await canNotify(db, rule, 'birthdays', objectId, intervalSec))) continue
     const text = `【${rule.name}】\n🎂 今天是 ${person.name} 的生日！${person.phone ? `\n📞 ${person.phone}` : ''}${person.address ? `\n📍 ${person.address}` : ''}`
-    await sendTelegram(env, settings, text)
+    await send(env, settings, text)
     await logReminder(db, rule, 'birthdays', objectId, 'sent', now.toISOString())
   }
 }
@@ -93,7 +93,7 @@ async function processDataRule(db, env, settings, rule) {
     const objectId = String(item.id)
     if (!(await canNotify(db, rule, objectType, objectId, intervalSec))) continue
     const text = buildMessage(rule, item, settings)
-    await sendTelegram(env, settings, text)
+    await send(env, settings, text)
     await logReminder(db, rule, objectType, objectId, 'sent', now.toISOString())
   }
 }

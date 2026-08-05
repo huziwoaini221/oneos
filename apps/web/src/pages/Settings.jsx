@@ -8,6 +8,8 @@ export default function Settings() {
     telegram_enabled: 1,
     default_channel: 'telegram',
     weather_city: '',
+    wecom_webhook: '',
+    wecom_enabled: 0,
     lifehub_token: ''
   })
   const [loading, setLoading] = useState(true)
@@ -48,7 +50,9 @@ export default function Settings() {
       telegram_chat_id: settings.telegram_chat_id || null,
       telegram_enabled: settings.telegram_enabled ? 1 : 0,
       default_channel: settings.default_channel,
-      weather_city: settings.weather_city || null
+      weather_city: settings.weather_city || null,
+      wecom_webhook: settings.wecom_webhook || null,
+      wecom_enabled: settings.wecom_enabled ? 1 : 0
     }
     try {
       await patch('/api/settings', payload)
@@ -100,7 +104,8 @@ export default function Settings() {
             <label>默认提醒渠道</label>
             <select value={settings.default_channel} onChange={e => setSettings({ ...settings, default_channel: e.target.value })}>
               <option value="telegram">Telegram</option>
-              <option value="email">Email (待实现)</option>
+              <option value="wecom">企业微信</option>
+              <option value="telegram,wecom">Telegram + 企业微信</option>
             </select>
           </div>
           <div className="field">
@@ -149,6 +154,22 @@ export default function Settings() {
           </div>
           <div className="field-actions">
             <button type="button" className="btn secondary" onClick={testTelegram}>发送测试消息</button>
+          </div>
+        </div>
+
+        <div className="card">
+          <h2>企业微信</h2>
+          <div className="field">
+            <label>群机器人 Webhook</label>
+            <input value={settings.wecom_webhook || ''} onChange={e => setSettings({ ...settings, wecom_webhook: e.target.value })} placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." />
+            <p className="hint">在企业微信群 → 群设置 → 群机器人 → 添加机器人后复制 Webhook 地址。</p>
+          </div>
+          <div className="field">
+            <label>启用企业微信推送</label>
+            <select value={settings.wecom_enabled} onChange={e => setSettings({ ...settings, wecom_enabled: parseInt(e.target.value) })}>
+              <option value={1}>启用</option>
+              <option value={0}>禁用</option>
+            </select>
           </div>
         </div>
 

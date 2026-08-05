@@ -1,6 +1,6 @@
 import { json, readJson } from './_lib.js'
 
-const ALLOWED = ['timezone', 'telegram_chat_id', 'telegram_enabled', 'default_channel', 'weather_city']
+const ALLOWED = ['timezone', 'telegram_chat_id', 'telegram_enabled', 'default_channel', 'weather_city', 'wecom_webhook', 'wecom_enabled']
 
 export async function onRequestGet({ env }) {
   const row = await env.DB.prepare('SELECT * FROM settings WHERE id = 1').first()

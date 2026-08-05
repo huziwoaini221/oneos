@@ -8,7 +8,9 @@ CREATE TABLE settings (
   telegram_chat_id TEXT,
   telegram_enabled INTEGER DEFAULT 1,
   default_channel TEXT DEFAULT 'telegram',
-  weather_city TEXT
+  weather_city TEXT,
+  wecom_webhook TEXT,
+  wecom_enabled INTEGER DEFAULT 0
 );
 
 INSERT INTO settings(id) VALUES(1);

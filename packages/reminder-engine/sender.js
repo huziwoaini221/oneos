@@ -1,5 +1,7 @@
 // 发送器 + 消息构建。
 // sendTelegram：Telegram Bot API sendMessage。
+// sendWeCom：企业微信应用消息。
+// send：按 default_channel 分发（双通道可同时启用）。
 // buildDailyDigest：time 型规则的每日晨报（今日任务 + 今日日程）。
 // buildMessage：data 型规则的按来源消息。
 
@@ -20,6 +22,34 @@ export async function sendTelegram(env, settings, text) {
     throw new Error(`telegram send failed (${res.status}): ${err}`)
   }
   return res.json()
+}
+
+// 统一发送：default_channel = 'telegram' 只发 TG；'wecom' 只发企微；'both' 双通道都发。
+export async function send(env, settings, text) {
+  const channels = (settings?.default_channel || 'telegram').split(',').map(s => s.trim()).filter(Boolean)
+  const results = []
+  for (const ch of channels) {
+    if (ch === 'telegram') results.push(await sendTelegram(env, settings, text))
+    else if (ch === 'wecom') results.push(await sendWeCom(env, settings, text))
+  }
+  return results
+}
+
+export async function sendWeCom(env, settings, text) {
+  const webhook = settings?.wecom_webhook
+  if (!webhook) throw new Error('wecom not configured (need wecom_webhook)')
+  if (!settings.wecom_enabled) return
+
+  const res = await fetch(webhook, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ msgtype: 'text', text: { content: text } })
+  })
+  const data = await res.json().catch(() => ({}))
+  if (data.errcode) {
+    throw new Error(`wecom send failed: ${data.errmsg}`)
+  }
+  return data
 }
 
 export async function buildDailyDigest(db, settings, now) {
