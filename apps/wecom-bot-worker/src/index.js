@@ -99,7 +99,11 @@ export class WecomBot {
       this.diag.subscribed = frame.errcode === 0
       console.log('[wecom] ack:', frame.errcode, frame.errmsg)
     }
-    const reply = buildReply(frame, `https://oneos.dpdns.org/?key=${this.env.LIFEHUB_TOKEN}`)
+    const reply = buildReply(
+      frame,
+      `https://oneos.dpdns.org/?key=${this.env.LIFEHUB_TOKEN}`,
+      `https://keshijilu.pages.dev/?key=${this.env.KESHIJILU_TOKEN}`
+    )
     if (reply) {
       try {
         this.ws?.send(JSON.stringify(reply))

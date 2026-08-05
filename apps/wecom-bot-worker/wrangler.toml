@@ -1,6 +1,12 @@
 name = "lifehub-wecom-bot"
 main = "src/index.js"
 compatibility_date = "2026-08-02"
+account_id = "5668460e9383a838873257131dcf7e35"
+
+[vars]
+WECOM_BOT_ID = "aibj77dQNrnmts2mYogqs37Rdud59oYAtGH"
+LIFEHUB_TOKEN = "c049cba60ab7a77c171be23b7be696df7e0c0119005de00f"
+KESHIJILU_TOKEN = "qihang2026"
 
 [triggers]
 crons = ["*/5 * * * *"]

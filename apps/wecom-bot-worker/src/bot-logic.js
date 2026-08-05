@@ -10,18 +10,28 @@ export function buildPing() {
   return { cmd: 'ping', headers: { req_id: crypto.randomUUID() } }
 }
 
-export function buildReply(frame, loginUrl) {
+export function buildReply(frame, lifehubUrl, keshijiluUrl) {
   const body = frame.body
   if (frame.cmd !== 'aibot_msg_callback') return null
   if (body?.msgtype !== 'text') return null
   const content = body.text?.content || ''
+  if (/课时|账本|ksjl|打卡/i.test(content)) {
+    return {
+      cmd: 'aibot_respond_msg',
+      headers: { req_id: frame.headers?.req_id ?? '' },
+      body: {
+        msgtype: 'markdown',
+        markdown: { content: `点击打开 课时账本：[打开](${keshijiluUrl})` }
+      }
+    }
+  }
   if (!/登陆|登录|login/i.test(content)) return null
   return {
     cmd: 'aibot_respond_msg',
     headers: { req_id: frame.headers?.req_id ?? '' },
     body: {
       msgtype: 'markdown',
-      markdown: { content: `点击打开 LifeHub：[登录链接](${loginUrl})` }
+      markdown: { content: `点击打开 LifeHub：[登录链接](${lifehubUrl})` }
     }
   }
 }
