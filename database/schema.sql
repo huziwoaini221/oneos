@@ -32,6 +32,7 @@ CREATE TABLE events (
   end_time DATETIME,
   location TEXT,
   notes TEXT,
+  color TEXT DEFAULT '#3b82f6',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

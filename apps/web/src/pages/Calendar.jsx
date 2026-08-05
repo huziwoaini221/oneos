@@ -38,7 +38,7 @@ function DayCell({ date, events, today, selected, onClick, inCurrentMonth }) {
 }
 
 function EventModal({ event, events, onClose, onSave, onDelete }) {
-  const editing = !!event
+  const editing = !!event?.id
   const [form, setForm] = useState({
     title: event?.title || '',
     start_time: event?.start_time ? event.start_time.slice(0, 16).replace(' ', 'T') : '',
@@ -200,7 +200,7 @@ export default function Calendar() {
           <button className="btn secondary" onClick={() => setCurrentMonth(new Date())}>今天</button>
           <button className="btn secondary" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))}>← 上月</button>
           <button className="btn secondary" onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))}>下月 →</button>
-          <button className="btn primary" onClick={() => { setSelectedDate(new Date()); setModalEvent(null); }}>+ 新建</button>
+          <button className="btn primary" onClick={() => { setModalEvent({}); }}>+ 新建</button>
         </div>
       </header>
 
@@ -236,7 +236,7 @@ export default function Calendar() {
             {events.filter(e => formatDateKey(new Date(e.start_time)) === formatDateKey(selectedDate)).length === 0 && (
               <p className="empty">这一天没有日程</p>
             )}
-            <button className="btn primary" style={{ marginTop: 12 }} onClick={() => setModalEvent(null)}>+ 新建日程</button>
+            <button className="btn primary" style={{ marginTop: 12 }} onClick={() => setModalEvent({})}>+ 新建日程</button>
           </div>
         )}
       </div>

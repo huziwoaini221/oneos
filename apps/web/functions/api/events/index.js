@@ -1,6 +1,6 @@
 import { json, list, create } from '../_lib.js'
 
-const ALLOWED = ['title', 'start_time', 'end_time', 'location', 'notes']
+const ALLOWED = ['title', 'start_time', 'end_time', 'location', 'notes', 'color']
 
 export async function onRequestGet({ env, request }) {
   const url = new URL(request.url)
