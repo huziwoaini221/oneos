@@ -52,11 +52,14 @@ async function processTimeRule(db, env, settings, rule) {
     const text = await buildDailyDigest(db, settings, now)
     await sendTelegram(env, settings, text)
     await logReminder(db, rule, 'rule', objectId, 'sent', now.toISOString())
-  }
 
-  const next = nextFireAt(now, settings.timezone, rule.schedule)
-  if (!next) throw new Error(`unsupported schedule: ${rule.schedule}`)
-  await db.prepare('UPDATE reminder_rules SET next_fire_at = ? WHERE id = ?').bind(next.toISOString(), rule.id).run()
+    const next = nextFireAt(now, settings.timezone, rule.schedule)
+    if (next) {
+      await db.prepare('UPDATE reminder_rules SET next_fire_at = ? WHERE id = ?').bind(next.toISOString(), rule.id).run()
+    }
+  }
+  // 未发送（去重窗口未过）时保持 next_fire_at 不变，下一次 tick 重新判断，
+  // 避免把已过触发点推进到次日而跳过当天。
 }
 
 async function processBirthdayRule(db, env, settings, rule) {
