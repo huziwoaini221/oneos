@@ -103,7 +103,8 @@ export class WecomBot {
       frame,
       `https://oneos.dpdns.org/?key=${this.env.LIFEHUB_TOKEN}`,
       `https://keshijilu.pages.dev/?key=${this.env.KESHIJILU_TOKEN}`,
-      `https://vaultlite.pages.dev/?key=${this.env.VAULTLITE_TOKEN}`
+      `https://vaultlite.pages.dev/?key=${this.env.VAULTLITE_TOKEN}`,
+      `https://biji-ev8.pages.dev/?key=${this.env.KESHIJILU_TOKEN}`
     )
     if (reply) {
       try {
