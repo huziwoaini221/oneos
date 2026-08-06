@@ -102,7 +102,8 @@ export class WecomBot {
     const reply = buildReply(
       frame,
       `https://oneos.dpdns.org/?key=${this.env.LIFEHUB_TOKEN}`,
-      `https://keshijilu.pages.dev/?key=${this.env.KESHIJILU_TOKEN}`
+      `https://keshijilu.pages.dev/?key=${this.env.KESHIJILU_TOKEN}`,
+      `https://vaultlite.pages.dev/?key=${this.env.VAULTLITE_TOKEN}`
     )
     if (reply) {
       try {

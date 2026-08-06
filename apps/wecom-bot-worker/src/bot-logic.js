@@ -10,7 +10,7 @@ export function buildPing() {
   return { cmd: 'ping', headers: { req_id: crypto.randomUUID() } }
 }
 
-export function buildReply(frame, lifehubUrl, keshijiluUrl) {
+export function buildReply(frame, lifehubUrl, keshijiluUrl, vaultliteUrl) {
   const body = frame.body
   if (frame.cmd !== 'aibot_msg_callback') return null
   if (body?.msgtype !== 'text') return null
@@ -22,6 +22,16 @@ export function buildReply(frame, lifehubUrl, keshijiluUrl) {
       body: {
         msgtype: 'markdown',
         markdown: { content: `点击打开 课时账本：[打开](${keshijiluUrl})` }
+      }
+    }
+  }
+  if (/保险库|vault|otp|验证码/i.test(content)) {
+    return {
+      cmd: 'aibot_respond_msg',
+      headers: { req_id: frame.headers?.req_id ?? '' },
+      body: {
+        msgtype: 'markdown',
+        markdown: { content: `点击打开 VaultLite：[打开](${vaultliteUrl})` }
       }
     }
   }
