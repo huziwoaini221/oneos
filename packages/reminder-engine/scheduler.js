@@ -95,7 +95,7 @@ export function deriveNotifyInterval(expr) {
   if (!cron) return 86400
   if (cron.dayOfMonth !== null) return 2678400 // 每月 ~31 天
   if (cron.dayOfWeek !== null) return 604800 // 每周
-  return 86400 // 每天
+  return 82800 // 每天 23h：容忍 ≤1h 调度偏移，晨报稳定按点发送
 }
 
 // 计算严格晚于 fromDate 的下一次本地触发点（UTC Date），不支持则返回 null
