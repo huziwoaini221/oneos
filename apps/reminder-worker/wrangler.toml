@@ -9,3 +9,11 @@ crons = ["*/15 * * * *"]
 binding = "DB"
 database_name = "lifehub-db"
 database_id = "e59138af-f4ea-44b7-9c97-1a9749dfa4a8"
+
+[[durable_objects.bindings]]
+name = "REMINDER_SCHEDULER"
+class_name = "ReminderScheduler"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ReminderScheduler"]
