@@ -1,0 +1,28 @@
+name: Reminder Trigger
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger LifeHub reminder worker
+        env:
+          CRON_SECRET: ${{ secrets.REMINDER_CRON_SECRET }}
+        run: |
+          code=$(curl -s -o /tmp/rem_trigger.out -w '%{http_code}' -X POST \
+            -H "X-Cron-Secret: ${CRON_SECRET}" \
+            https://lifehub-reminder-worker.qihangmedical.workers.dev/run \
+            --max-time 60)
+          body=$(cat /tmp/rem_trigger.out)
+          echo "worker /run -> HTTP ${code} : ${body}"
+          if [ "$code" != "200" ]; then
+            echo "::error::reminder trigger failed (HTTP ${code})"
+            exit 1
+          fi
